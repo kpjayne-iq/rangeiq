@@ -7257,6 +7257,11 @@ export default function RangeIQ() {
   const histRef = useRef(null);
   const autoTimer = useRef(null);
   const pendingAnalysis = useRef(false);
+  // Feedback system state
+  const [showFeedback,setShowFeedback]   = useState(false);
+  const [feedbackText,setFeedbackText]   = useState("");
+  const [feedbackEmail,setFeedbackEmail] = useState("");
+  const [feedbackSent,setFeedbackSent]   = useState(false);
 
   // Derive IP/OOP automatically from positions (no manual toggle)
   const heroIsIP = getPositionStatus(heroPos, villainPos);
@@ -10075,6 +10080,96 @@ export default function RangeIQ() {
           )}
         </div>
       </div>
+
+      {/* ══════ Share an Idea — Feedback Button ══════ */}
+      {!showFeedback && (
+        <div
+          onClick={()=>setShowFeedback(true)}
+          title="Share an idea"
+          style={{
+            position:"fixed", bottom:16, right:16, zIndex:800,
+            background:C.card, border:`1px solid ${C.border}`,
+            borderRadius:50, width:40, height:40,
+            display:"flex", alignItems:"center", justifyContent:"center",
+            cursor:"pointer", transition:"all 180ms ease",
+            boxShadow:"0 4px 12px rgba(0,0,0,0.3)",
+            opacity:0.7,
+          }}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.opacity="1";}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.opacity="0.7";}}
+        >
+          <span style={{ fontSize:16, lineHeight:1 }}>💡</span>
+        </div>
+      )}
+      {showFeedback && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:850, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}
+          onClick={e=>{if(e.target===e.currentTarget)setShowFeedback(false);}}>
+          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:20, padding:32, maxWidth:440, width:"100%", position:"relative" }}>
+            <div onClick={()=>setShowFeedback(false)} style={{ position:"absolute", top:16, right:16, cursor:"pointer", color:C.muted, fontSize:18, lineHeight:1 }}>&times;</div>
+            <div style={{ fontSize:13, fontWeight:600, letterSpacing:"0.08em", textTransform:"uppercase", color:C.gold, marginBottom:8 }}>Help Shape RangeIQ</div>
+            <div style={{ fontSize:20, fontWeight:700, color:C.text, marginBottom:8 }}>What would make this more useful?</div>
+            <div style={{ fontSize:14, color:C.muted, marginBottom:20, lineHeight:1.5 }}>Feature ideas, workflow suggestions, or anything that would improve your training experience.</div>
+            {feedbackSent ? (
+              <div style={{ textAlign:"center", padding:"24px 0" }}>
+                <div style={{ fontSize:28, marginBottom:8 }}>✓</div>
+                <div style={{ fontSize:16, fontWeight:600, color:C.text, marginBottom:4 }}>Thanks for the input.</div>
+                <div style={{ fontSize:14, color:C.muted }}>We read every suggestion.</div>
+              </div>
+            ) : (
+              <>
+                <textarea
+                  value={feedbackText}
+                  onChange={e=>setFeedbackText(e.target.value)}
+                  placeholder="What would you improve, add, or change?"
+                  style={{
+                    width:"100%", minHeight:120, padding:14, borderRadius:12,
+                    background:C.bg, border:`1px solid ${C.border}`, color:C.text,
+                    fontSize:15, fontFamily:"inherit", resize:"vertical", outline:"none",
+                    lineHeight:1.6,
+                  }}
+                  onFocus={e=>e.target.style.borderColor=C.gold}
+                  onBlur={e=>e.target.style.borderColor=C.border}
+                />
+                <input
+                  type="email"
+                  value={feedbackEmail}
+                  onChange={e=>setFeedbackEmail(e.target.value)}
+                  placeholder="Email (optional — if you want us to follow up)"
+                  style={{
+                    width:"100%", height:44, padding:"0 14px", borderRadius:12, marginTop:10,
+                    background:C.bg, border:`1px solid ${C.border}`, color:C.text,
+                    fontSize:14, fontFamily:"inherit", outline:"none",
+                  }}
+                  onFocus={e=>e.target.style.borderColor=C.gold}
+                  onBlur={e=>e.target.style.borderColor=C.border}
+                />
+                <button
+                  onClick={()=>{
+                    if(!feedbackText.trim())return;
+                    const body=`Feedback: ${feedbackText.trim()}${feedbackEmail?`\n\nFrom: ${feedbackEmail}`:''}`;
+                    const mailLink=`mailto:support@rangeiqpoker.com?subject=${encodeURIComponent("RangeIQ Feedback")}&body=${encodeURIComponent(body)}`;
+                    window.open(mailLink,'_blank');
+                    setFeedbackSent(true);
+                    setFeedbackText("");
+                    setFeedbackEmail("");
+                    setTimeout(()=>{setShowFeedback(false);setFeedbackSent(false);},2500);
+                  }}
+                  disabled={!feedbackText.trim()}
+                  style={{
+                    width:"100%", height:48, marginTop:14, borderRadius:12, border:"none",
+                    background:feedbackText.trim()?C.gold:"#2A2A2A",
+                    color:feedbackText.trim()?C.bg:C.disabled,
+                    fontSize:15, fontWeight:600, fontFamily:"inherit", cursor:feedbackText.trim()?"pointer":"default",
+                    transition:"all 180ms ease",
+                  }}
+                >
+                  Send Feedback
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {toast&&<Toast msg={toast} onDone={()=>setToast(null)} onViewVault={()=>{setToast(null);setScreen("vault");}}/>}
     </div>
