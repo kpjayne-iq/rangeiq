@@ -7207,6 +7207,17 @@ export default function RangeIQ() {
   const [fieldStickiness,setFieldStickiness]   = useState("medium");
   const [vilAction,setVilAction]       = useState([]);
   const [vilBetAmount,setVilBetAmount] = useState("");  // Villain bet/raise $ amount
+  // Validated villain bet setter: enforces minimum of 1 big blind
+  const setVilBetValidated = useCallback((val) => {
+    if (val === "" || val === null || val === undefined) { setVilBetAmount(""); return ""; }
+    const num = parseFloat(val);
+    if (isNaN(num) || num <= 0) { setVilBetAmount(""); return ""; }
+    const minBet = gameSize ? gameSize.bb : 1;
+    const clamped = Math.max(num, minBet);
+    const final = String(clamped);
+    setVilBetAmount(final);
+    return final;
+  }, [gameSize]);
   const [sliders,setSliders]           = useState(null);
   const [picker,setPicker]             = useState(null);
   const [kbInput,setKbInput]           = useState("");
@@ -8715,7 +8726,7 @@ export default function RangeIQ() {
                                           { type: "raise", street, actor:"Villain", amount: e.target.value }
                                         ]);
                                       }}
-                                      style={{ width:80, height:36, background:"#0F172A", border:"1px solid #374151", borderRadius:8, color:"#E5E7EB", fontSize:14, padding:"0 10px", fontFamily:"Inter,sans-serif" }}
+                                      onBlur={e => { const v = setVilBetValidated(e.target.value); if (v && v !== e.target.value) { setVilAction(prev => prev.map(a => (a.street === street && a.actor === "Villain" && a.amount) ? {...a, amount: v} : a)); } }} style={{ width:80, height:36, background:"#0F172A", border:"1px solid #374151", borderRadius:8, color:"#E5E7EB", fontSize:14, padding:"0 10px", fontFamily:"Inter,sans-serif" }}
                                     />
                                   )}
                                   {lastType && (
@@ -8807,6 +8818,7 @@ export default function RangeIQ() {
                                           ]);
                                         }}
                                         style={{ width:70, height:36, background:"#0F172A", border:"1px solid #374151", borderRadius:8, color:"#E5E7EB", fontSize:13, padding:"0 8px", fontFamily:"Inter,sans-serif" }}
+                                        onBlur={e => { const v = setVilBetValidated(e.target.value); if (v && v !== e.target.value) { setVilAction(prev => prev.map(a => (a.street === street && a.actor === "Villain" && a.amount) ? {...a, amount: v} : a)); } }}
                                       />
                                     )}
                                     {(selCallers >= 0 || isRaiseSel) && (
@@ -8861,7 +8873,7 @@ export default function RangeIQ() {
                                             setVilBetAmount(e.target.value);
                                             setVilAction(prev => [...prev.filter(x=>x.street!==street), { type:"raise", street, actor:"Villain", amount: e.target.value }]);
                                           }}
-                                          style={{ width:80, height:36, background:"#0F172A", border:"1px solid #374151", borderRadius:8, color:"#E5E7EB", fontSize:14, padding:"0 10px", fontFamily:"Inter,sans-serif" }}
+                                          onBlur={e => { const v = setVilBetValidated(e.target.value); if (v && v !== e.target.value) { setVilAction(prev => prev.map(a => (a.street === street && a.actor === "Villain" && a.amount) ? {...a, amount: v} : a)); } }} style={{ width:80, height:36, background:"#0F172A", border:"1px solid #374151", borderRadius:8, color:"#E5E7EB", fontSize:14, padding:"0 10px", fontFamily:"Inter,sans-serif" }}
                                         />
                                       )}
                                       {vilTypeBB && (
@@ -8887,7 +8899,7 @@ export default function RangeIQ() {
                                           { type: lastType, street, actor:"Villain", amount: e.target.value }
                                         ]);
                                       }}
-                                      style={{ width:80, height:36, background:"#0F172A", border:"1px solid #374151", borderRadius:8, color:"#E5E7EB", fontSize:14, padding:"0 10px", fontFamily:"Inter,sans-serif" }}
+                                      onBlur={e => { const v = setVilBetValidated(e.target.value); if (v && v !== e.target.value) { setVilAction(prev => prev.map(a => (a.street === street && a.actor === "Villain" && a.amount) ? {...a, amount: v} : a)); } }} style={{ width:80, height:36, background:"#0F172A", border:"1px solid #374151", borderRadius:8, color:"#E5E7EB", fontSize:14, padding:"0 10px", fontFamily:"Inter,sans-serif" }}
                                     />
                                   )}
                                   {lastType && (
@@ -8988,6 +9000,7 @@ export default function RangeIQ() {
                                         ]);
                                       }}
                                       style={{ width:70, height:36, background:"#0F172A", border:"1px solid #374151", borderRadius:8, color:"#E5E7EB", fontSize:13, padding:"0 8px", fontFamily:"Inter,sans-serif" }}
+                                      onBlur={e => { const v = setVilBetValidated(e.target.value); if (v && v !== e.target.value) { setVilAction(prev => prev.map(a => (a.street === street && a.actor === "Villain" && a.amount) ? {...a, amount: v} : a)); } }}
                                     />
                                   )}
                                   {(selectedCallers >= 0 || isRaiseSelected) && (
@@ -9029,7 +9042,7 @@ export default function RangeIQ() {
                                         { type: lastType, street, actor:"Villain", amount: e.target.value }
                                       ]);
                                     }}
-                                    style={{ width:80, height:36, background:"#0F172A", border:"1px solid #374151", borderRadius:8, color:"#E5E7EB", fontSize:14, padding:"0 10px", fontFamily:"Inter,sans-serif" }}
+                                    onBlur={e => { const v = setVilBetValidated(e.target.value); if (v && v !== e.target.value) { setVilAction(prev => prev.map(a => (a.street === street && a.actor === "Villain" && a.amount) ? {...a, amount: v} : a)); } }} style={{ width:80, height:36, background:"#0F172A", border:"1px solid #374151", borderRadius:8, color:"#E5E7EB", fontSize:14, padding:"0 10px", fontFamily:"Inter,sans-serif" }}
                                   />
                                 )}
                                 {lastType && (
