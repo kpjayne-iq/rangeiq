@@ -3794,7 +3794,7 @@ function RangeBuilderScreen({ onBack, initialGameSize }) {
         </div>
       </div>
 
-      <div style={{ maxWidth:1100, margin:"0 auto", padding:"20px 16px", display:"grid", gridTemplateColumns:"260px 1fr", gap:20, alignItems:"start" }}>
+      <div className="riq-builder-grid" style={{ maxWidth:1100, margin:"0 auto", padding:"20px 16px", display:"grid", gridTemplateColumns:"260px 1fr", gap:20, alignItems:"start" }}>
 
         {/* LEFT  -  Controls (redesigned: 2 groups, minimal scroll) */}
         <div style={{ display:"flex", flexDirection:"column", gap:0 }}>
@@ -5564,6 +5564,11 @@ const BASE_CSS = `
   ::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:99px; }
   input,select,button,textarea { font-family:'Inter',sans-serif; }
   button:focus,input:focus,select:focus { outline:none; }
+  @media(max-width:768px) {
+    .riq-main-grid { grid-template-columns:1fr !important; }
+    .riq-builder-grid { grid-template-columns:1fr !important; }
+    .riq-edit-drawer { width:100% !important; max-width:100% !important; }
+  }
 `;
 
 // ================================================================
@@ -8160,7 +8165,7 @@ export default function RangeIQ() {
 
         {/* - EDIT SPOT DRAWER - */}
         {drawerOpen&&(
-          <div style={{
+          <div className="riq-edit-drawer" style={{
             position:"fixed", top:0, left:0, height:"100vh", width:320,
             background:C.card, borderRight:"1px solid "+C.border,
             zIndex:150, overflowY:"auto", display:"flex", flexDirection:"column",
@@ -8437,7 +8442,7 @@ export default function RangeIQ() {
         </div>
 
         {/* V3 MAIN CONTENT */}
-        <div style={{ display:"grid", gridTemplateColumns:rec?"1fr 380px":"1fr", gap:20, alignItems:"start" }}>
+        <div className="riq-main-grid" style={{ display:"grid", gridTemplateColumns:rec?"1fr 380px":"1fr", gap:20, alignItems:"start" }}>
 
           {/* CENTER: DECISION CARD */}
           <div>
