@@ -5704,6 +5704,9 @@ const BASE_CSS = `
     .riq-home-grid { grid-template-columns:1fr !important; }
     .riq-home-stats { gap:24px !important; }
   }
+  @media(max-width:1024px) {
+    .riq-main-grid { grid-template-columns:1fr !important; }
+  }
   @media(max-width:420px) {
     body { overflow-x:hidden; }
   }
@@ -8299,7 +8302,7 @@ export default function RangeIQ() {
       </div>
 
       {/* V3 LAYOUT - Decision-first, Progressive Disclosure */}
-      <div style={{ maxWidth:1200, margin:"0 auto", padding:"20px 16px" }}>
+      <div style={{ maxWidth:1200, margin:"0 auto", padding:"20px 16px", overflow:"hidden" }}>
 
         {/* - EDIT SPOT DRAWER - */}
         {drawerOpen&&(
