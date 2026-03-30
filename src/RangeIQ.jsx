@@ -7416,6 +7416,7 @@ export default function RangeIQ() {
   const pendingAnalysis = useRef(false);
   // Feedback system state
   const [showFeedback,setShowFeedback]   = useState(false);
+  const [showLeakHunter,setShowLeakHunter] = useState(false);
   const [feedbackText,setFeedbackText]   = useState("");
   const [feedbackEmail,setFeedbackEmail] = useState("");
   const [feedbackSent,setFeedbackSent]   = useState(false);
@@ -8093,7 +8094,170 @@ export default function RangeIQ() {
           )}
         </div>
 
-                {vault.length===0?(
+        {/* ══════ LEAK HUNTER ══════ */}
+        {vault.length >= 3 && (()=>{
+          const scores = vault.map(h => h.rec && h.rec.score ? h.rec.score : 0).filter(s => s > 0);
+          const avgScore = scores.length > 0 ? Math.round(scores.reduce((a,b) => a+b, 0) / scores.length) : 0;
+          const leakThreshold = 65;
+          const leakHands = vault.filter(h => h.rec && h.rec.score > 0 && h.rec.score < leakThreshold);
+          const leakRate = scores.length > 0 ? Math.round((leakHands.length / scores.length) * 100) : 0;
+
+          // Breakdown by street
+          const streetStats = {};
+          vault.forEach(h => {
+            const s = h.street || "preflop";
+            if (!streetStats[s]) streetStats[s] = { count:0, totalScore:0 };
+            streetStats[s].count++;
+            if (h.rec && h.rec.score) streetStats[s].totalScore += h.rec.score;
+          });
+          const streetAvgs = Object.entries(streetStats).map(([s, d]) => ({
+            street: s, avg: Math.round(d.totalScore / d.count), count: d.count
+          })).sort((a,b) => a.avg - b.avg);
+          const weakestStreet = streetAvgs.length > 0 ? streetAvgs[0] : null;
+
+          // Breakdown by villain type
+          const vilStats = {};
+          vault.forEach(h => {
+            const v = h.archetype || "unknown";
+            if (!vilStats[v]) vilStats[v] = { count:0, totalScore:0 };
+            vilStats[v].count++;
+            if (h.rec && h.rec.score) vilStats[v].totalScore += h.rec.score;
+          });
+          const vilAvgs = Object.entries(vilStats).map(([v, d]) => ({
+            villain: v, label: ARCHETYPES[v] ? ARCHETYPES[v].label : v, avg: Math.round(d.totalScore / d.count), count: d.count
+          })).sort((a,b) => a.avg - b.avg);
+          const weakestVillain = vilAvgs.length > 0 ? vilAvgs[0] : null;
+
+          // Lowest edge hands (bottom 5)
+          const lowestEdge = [...vault].filter(h => h.rec && h.rec.score > 0).sort((a,b) => a.rec.score - b.rec.score).slice(0, 5);
+
+          const band = scoreBand(avgScore);
+
+          return (
+            <div style={{ marginBottom:20, animation:"fadeUp 0.4s ease" }}>
+              <button onClick={()=>setShowLeakHunter(!showLeakHunter)} style={{
+                width:"100%", padding:"14px 18px", borderRadius:12, cursor:"pointer",
+                background: showLeakHunter ? "rgba(139,92,246,0.08)" : "rgba(255,255,255,0.03)",
+                border: "1px solid " + (showLeakHunter ? "rgba(139,92,246,0.3)" : C.border),
+                color: showLeakHunter ? C.purple : C.text,
+                display:"flex", alignItems:"center", justifyContent:"space-between",
+                fontFamily:"'Inter',sans-serif", fontSize:14, fontWeight:700,
+                transition:"all 0.2s",
+              }}>
+                <span style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:18 }}>&#128269;</span>
+                  Leak Hunter
+                </span>
+                <span style={{ fontSize:11, color:C.muted, fontWeight:500 }}>
+                  {showLeakHunter ? "Hide" : "Analyze " + vault.length + " hands"}
+                </span>
+              </button>
+
+              {showLeakHunter && (
+                <div style={{ marginTop:12, display:"flex", flexDirection:"column", gap:12 }}>
+
+                  {/* Top stats row */}
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
+                    <div style={{ background:C.card, borderRadius:12, padding:"16px 14px", border:"1px solid "+C.border, textAlign:"center" }}>
+                      <div style={{ fontSize:28, fontWeight:800, color:band.col }}>{avgScore}</div>
+                      <div style={{ fontSize:10, color:C.muted, textTransform:"uppercase", letterSpacing:"0.08em", marginTop:2 }}>Avg Edge Score</div>
+                    </div>
+                    <div style={{ background:C.card, borderRadius:12, padding:"16px 14px", border:"1px solid "+C.border, textAlign:"center" }}>
+                      <div style={{ fontSize:28, fontWeight:800, color:leakRate > 30 ? C.red : leakRate > 15 ? C.amber : C.green }}>{leakRate}%</div>
+                      <div style={{ fontSize:10, color:C.muted, textTransform:"uppercase", letterSpacing:"0.08em", marginTop:2 }}>Leak Rate</div>
+                    </div>
+                    <div style={{ background:C.card, borderRadius:12, padding:"16px 14px", border:"1px solid "+C.border, textAlign:"center" }}>
+                      <div style={{ fontSize:28, fontWeight:800, color:C.text }}>{scores.length}</div>
+                      <div style={{ fontSize:10, color:C.muted, textTransform:"uppercase", letterSpacing:"0.08em", marginTop:2 }}>Hands Analyzed</div>
+                    </div>
+                  </div>
+
+                  {/* Weakest areas */}
+                  <div style={{ background:C.card, borderRadius:12, padding:18, border:"1px solid "+C.border }}>
+                    <div style={{ fontSize:11, fontWeight:600, color:C.muted, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:12 }}>Where You Leak Most</div>
+
+                    {/* By street */}
+                    {streetAvgs.length > 0 && (
+                      <div style={{ marginBottom:14 }}>
+                        <div style={{ fontSize:12, color:C.text, fontWeight:600, marginBottom:8 }}>By Street</div>
+                        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                          {streetAvgs.map(s => (
+                            <div key={s.street} style={{
+                              padding:"6px 12px", borderRadius:8,
+                              background: s === weakestStreet ? "rgba(239,68,68,0.08)" : "rgba(255,255,255,0.03)",
+                              border: "1px solid " + (s === weakestStreet ? "rgba(239,68,68,0.25)" : C.border),
+                            }}>
+                              <span style={{ fontSize:12, fontWeight:600, color: s === weakestStreet ? C.red : C.text, textTransform:"capitalize" }}>{s.street}</span>
+                              <span style={{ fontSize:11, color:C.muted, marginLeft:6 }}>avg {s.avg}</span>
+                              <span style={{ fontSize:10, color:C.disabled, marginLeft:4 }}>({s.count})</span>
+                            </div>
+                          ))}
+                        </div>
+                        {weakestStreet && <div style={{ fontSize:11, color:C.red, marginTop:6, fontStyle:"italic" }}>Your weakest street is the {weakestStreet.street} (avg score: {weakestStreet.avg})</div>}
+                      </div>
+                    )}
+
+                    {/* By villain */}
+                    {vilAvgs.length > 0 && (
+                      <div>
+                        <div style={{ fontSize:12, color:C.text, fontWeight:600, marginBottom:8 }}>By Opponent Type</div>
+                        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                          {vilAvgs.map(v => (
+                            <div key={v.villain} style={{
+                              padding:"6px 12px", borderRadius:8,
+                              background: v === weakestVillain ? "rgba(239,68,68,0.08)" : "rgba(255,255,255,0.03)",
+                              border: "1px solid " + (v === weakestVillain ? "rgba(239,68,68,0.25)" : C.border),
+                            }}>
+                              <span style={{ fontSize:12, fontWeight:600, color: v === weakestVillain ? C.red : (ARCHETYPES[v.villain]||{}).color || C.text }}>{v.label}</span>
+                              <span style={{ fontSize:11, color:C.muted, marginLeft:6 }}>avg {v.avg}</span>
+                              <span style={{ fontSize:10, color:C.disabled, marginLeft:4 }}>({v.count})</span>
+                            </div>
+                          ))}
+                        </div>
+                        {weakestVillain && <div style={{ fontSize:11, color:C.red, marginTop:6, fontStyle:"italic" }}>You leak most against {weakestVillain.label} (avg score: {weakestVillain.avg})</div>}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Lowest edge spots */}
+                  {lowestEdge.length > 0 && (
+                    <div style={{ background:C.card, borderRadius:12, padding:18, border:"1px solid "+C.border }}>
+                      <div style={{ fontSize:11, fontWeight:600, color:C.muted, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:12 }}>Lowest Edge Spots</div>
+                      {lowestEdge.map((h,i) => (
+                        <div key={h.id} style={{
+                          display:"flex", alignItems:"center", justifyContent:"space-between",
+                          padding:"8px 10px", borderRadius:8, marginBottom:4,
+                          background: i === 0 ? "rgba(239,68,68,0.06)" : "rgba(255,255,255,0.02)",
+                          border: "1px solid " + (i === 0 ? "rgba(239,68,68,0.15)" : "transparent"),
+                        }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                            <span style={{ fontSize:10, fontWeight:700, color:C.disabled, width:16 }}>#{i+1}</span>
+                            <span style={{ fontSize:12, color:C.text, fontWeight:600 }}>
+                              {h.heroCards.filter(Boolean).map(c => c.rank + SUIT_SYM[c.suit]).join("")}
+                            </span>
+                            <span style={{ fontSize:11, color:C.muted }}>
+                              vs {ARCHETYPES[h.archetype] ? ARCHETYPES[h.archetype].label : h.archetype}
+                            </span>
+                            <span style={{ fontSize:10, color:C.disabled, textTransform:"capitalize" }}>{h.street}</span>
+                          </div>
+                          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                            <span style={{ fontSize:12, fontWeight:700, color: h.rec.score < 50 ? C.red : C.amber }}>{h.rec.score}</span>
+                            <button onClick={()=>loadVaultHand(h)} style={{
+                              padding:"3px 8px", borderRadius:5, fontSize:10, fontWeight:600, cursor:"pointer",
+                              background:"rgba(230,197,102,0.1)", border:"1px solid rgba(230,197,102,0.25)", color:C.gold,
+                            }}>Load</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {vault.length===0?(
           <div style={{ textAlign:"center",color:C.muted,padding:80 }}>
             <div style={{ fontSize:44,marginBottom:14,opacity:0.2 }}>{SUIT_SYM.s}</div>
             <p style={{ fontSize:15 }}>No saved hands yet.</p>
