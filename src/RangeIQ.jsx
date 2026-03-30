@@ -3728,7 +3728,7 @@ function buildPreflopRangeMap(gameSize, position, tableType, situation, playersL
       // - FACING LIMPERS -
       else if (sit === "one_limper" || sit === "two_limpers") {
         const limpCount = sit === "two_limpers" ? 2 : 1;
-        const isoSize = "$" + Math.round((getPreflopOpenMultiplier(bb, archetype) + limpCount * 1.5) * bb);
+        const isoSize = "$" + Math.round((getPreflopOpenMultiplier(bb, villainArchetype) + limpCount * 1.5) * bb);
         const netFoldIso = effFoldIso * (1 / (1 + limpCount * 0.15)) * stickyMod;
 
         if (rawHS >= isoThreshold) {
@@ -4110,8 +4110,8 @@ function RangeBuilderScreen({ onBack, initialGameSize }) {
             const field = PREFLOP_FIELD_PROFILES[tableType] || PREFLOP_FIELD_PROFILES["standard"];
             const limpCount = situation === "two_limpers" ? 2 : situation === "one_limper" ? 1 : 0;
             const isoSize = limpCount > 0
-              ? "$" + Math.round((getPreflopOpenMultiplier(gameSize.bb, archetype) + limpCount * 1.5) * gameSize.bb)
-              : "$" + Math.round(getPreflopOpenMultiplier(gameSize.bb, archetype) * gameSize.bb);
+              ? "$" + Math.round((getPreflopOpenMultiplier(gameSize.bb, villainType) + limpCount * 1.5) * gameSize.bb)
+              : "$" + Math.round(getPreflopOpenMultiplier(gameSize.bb, villainType) * gameSize.bb);
             const openPct   = Math.round((counts["Open"]||0)/169*100);
             const isoPct    = Math.round((counts["Iso"]||0)/169*100);
             const villainLabel = villainType ? (ARCHETYPES[villainType]?.label || villainType) : null;
