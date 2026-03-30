@@ -888,6 +888,226 @@ function recommend(state) {
     ];
   }
 
+  // - ARCHETYPE-AWARE POSTFLOP FACING RAISE -
+  // When villain RAISES (not just bets) postflop, the interpretation is heavily archetype-dependent.
+  // A nit who check-raises = the nuts. A maniac who raises = could be air.
+  // This layer overrides the base recommendation when villain's action is specifically a raise.
+  // Detection: vilAction entry for current street has type === "raise" (not "bet")
+  const vilActionsThisStreet = (vilAction||[]).filter(a => a.street === str && a.actor === "Villain");
+  const vilRaisedPostflop = str !== "preflop" && vilActionsThisStreet.some(a => a.type === "raise");
+  // Check-raise detection: villain checked first, then raised after hero bet
+  const vilCheckedFirst = vilActionsThisStreet.length >= 2 &&
+    vilActionsThisStreet[0].type === "check" && vilActionsThisStreet.some(a => a.type === "raise");
+  const isCheckRaise = vilCheckedFirst;
+
+  if (vilRaisedPostflop && facingBet) {
+    // Archetype-specific raise interpretation
+    if (archetype === "nit") {
+      // Nit raised postflop = the absolute nuts. At live low-stakes, nits NEVER raise
+      // without the stone-cold nuts or a set minimum. Fold everything except the nuts.
+      const isNuts = hs >= 0.90; // Only continue with near-nut hands (sets+, top two pair on dry boards)
+      const isVeryStrong = hs >= 0.78;
+      if (isNuts) {
+        // We have the nuts too - raise back for value
+        action = "Raise"; sizing = sz.raise || "3x";
+        tag = "Value Raise vs Nit"; score = 90;
+        bullets = [
+          isCheckRaise
+            ? "Nit check-raised - they have the nuts, but so do you"
+            : "Nit raised postflop - this is an extremely rare and strong action",
+          "Your hand is at the top of your range - raise for maximum value",
+          "They will only put in this raise with a premium holding - match it",
+        ];
+        altLines = ["Call (disguise strength)"];
+      } else if (isVeryStrong) {
+        // Very strong but not the nuts - call cautiously, re-evaluate on later streets
+        action = "Call"; sizing = null;
+        tag = "Cautious Call vs Nit Raise"; score = 72;
+        bullets = [
+          isCheckRaise
+            ? "Nit check-raised - this almost always means the nuts at live low-stakes"
+            : "Nit raised postflop - their range is extremely narrow and strong",
+          "Your hand is strong but likely behind their raising range",
+          "Call once and fold to further aggression unless you improve",
+        ];
+        altLines = ["Fold (if nit is ultra-tight)", "Raise (only with the nuts)"];
+      } else {
+        // Everything else: fold. A nit's postflop raise is the nuts.
+        action = "Fold"; sizing = null;
+        tag = "Fold to Nit Raise"; score = 88;
+        bullets = [
+          isCheckRaise
+            ? "Nit check-raised - at live low-stakes this is ALWAYS the nuts"
+            : "Nit raised postflop - their range is sets, top two pair, or better",
+          "A nit's raising range is AA, KK, QQ - your hand has no equity",
+          "Fold immediately - calling burns money against the tightest range at the table",
+        ];
+        altLines = ["Call (only with nut flush draw or set)"];
+      }
+    } else if (archetype === "maniac") {
+      // Maniac raised postflop = could be anything. Air, draws, middling pairs, or the nuts.
+      // Widen calling range significantly. Their raise is much less credible.
+      if (hs >= 0.60) {
+        action = "Raise"; sizing = sz.raise || "3x";
+        tag = "Value Raise vs Maniac"; score = 84;
+        bullets = [
+          isCheckRaise
+            ? "Maniac check-raised - this could easily be a bluff or semi-bluff"
+            : "Maniac raised postflop - their raising range is extremely wide",
+          "Your hand is strong enough to raise for value against their bluff-heavy range",
+          "Build the pot now while they are willing to put money in with air",
+        ];
+        altLines = ["Call (keep their bluffs in)"];
+      } else if (hs >= 0.38) {
+        action = "Call"; sizing = null;
+        tag = "Bluff Catch vs Maniac Raise"; score = 74;
+        bullets = [
+          isCheckRaise
+            ? "Maniac check-raised - they do this with a wide range including many bluffs"
+            : "Maniac raised - their raise means less than from any other player type",
+          "Your hand has showdown value against their wide raising range",
+          "Call and let them continue bluffing on later streets",
+        ];
+        altLines = ["Raise (with strong draws)", "Fold (only on very scary boards)"];
+      } else {
+        action = "Fold"; sizing = null;
+        tag = "Fold vs Maniac Raise"; score = 68;
+        bullets = [
+          "Even against a maniac, folding without equity is correct",
+          "Their raise is wide but your hand has no showdown value",
+          "Wait for a better spot to trap them with a real hand",
+        ];
+        altLines = ["Call (only with pot odds of 4:1+)"];
+      }
+    } else if (archetype === "young_aggro") {
+      // Young aggro raises postflop with a polarized range - strong hands and bluffs.
+      // More bluffs than a TAG but fewer than a maniac. Widen calling range moderately.
+      if (hs >= 0.65) {
+        action = "Raise"; sizing = sz.raise || "3x";
+        tag = "Value Raise vs Young Aggro"; score = 82;
+        bullets = [
+          isCheckRaise
+            ? "Young aggro check-raised - they do this as a semi-bluff at high frequency"
+            : "Young aggro raised - their range includes many bluffs and semi-bluffs",
+          "Your hand is ahead of their polarized raising range",
+          "Raise to get value from their wide range and deny equity to draws",
+        ];
+        altLines = ["Call (pot control vs unknown range)"];
+      } else if (hs >= 0.45) {
+        action = "Call"; sizing = null;
+        tag = "Call Down vs Young Aggro Raise"; score = 72;
+        bullets = [
+          isCheckRaise
+            ? "Young aggro check-raised - they bluff more often than they value raise"
+            : "Young aggro raised - do not fold a decent hand to their frequent aggression",
+          "Calling is more profitable than folding against this player type",
+          "They fold their bluffs and continue with value if you raise - just call",
+        ];
+        altLines = ["Fold (very scary board only)", "Raise (top of this range)"];
+      } else {
+        action = "Fold"; sizing = null;
+        tag = "Fold to Young Aggro Raise"; score = 74;
+        bullets = [
+          "Without equity, fold to their raise - they have bluffs but you cannot beat any of their range",
+          "Young aggro players barrel and raise frequently - wait for a better hand to call with",
+          "Calling without equity is just paying off their value hands",
+        ];
+        altLines = ["Call (only with strong draw)"];
+      }
+    } else if (archetype === "lag") {
+      // LAG raises are semi-balanced but still wider than TAG. Moderate widening of continue range.
+      if (hs >= 0.62) {
+        action = "Raise"; sizing = sz.raise || "2.5x";
+        tag = "Value Raise vs LAG"; score = 80;
+        bullets = [
+          isCheckRaise
+            ? "LAG check-raised - their range includes value and semi-bluffs"
+            : "LAG raised postflop - they raise wider than balanced, your hand is ahead",
+          "Raise for value against their wide and aggressive range",
+          "They will continue with draws and pairs - charge them maximum",
+        ];
+        altLines = ["Call (pot control)"];
+      } else if (hs >= 0.42) {
+        action = "Call"; sizing = null;
+        tag = "Bluff Catch vs LAG Raise"; score = 72;
+        bullets = [
+          "LAG's raising range includes enough bluffs to make calling profitable",
+          "Your hand has showdown value against the weaker part of their range",
+          "Do not raise - they only continue with better when you do",
+        ];
+        altLines = ["Fold (if very wet board favors their range)", "Raise (only near-nut hands)"];
+      } else {
+        action = "Fold"; sizing = null;
+        tag = "Fold to LAG Raise"; score = 70;
+        bullets = [
+          "LAGs raise wide but your hand cannot beat even their bluffs",
+          "Fold and preserve stack for spots where you have equity",
+          "Calling without a hand bleeds chips against an aggressive player",
+        ];
+        altLines = ["Call (only getting 4:1+ pot odds with a draw)"];
+      }
+    } else if (archetype === "station" || archetype === "loose_passive") {
+      // Calling stations and loose-passive NEVER raise without the nuts.
+      // When a station raises, treat it like a nit raising - they have it.
+      if (hs >= 0.85) {
+        action = "Call"; sizing = null;
+        tag = "Cautious Call vs Passive Raise"; score = 75;
+        bullets = [
+          isCheckRaise
+            ? "A calling station check-raised - this is an extremely rare and strong action"
+            : "A passive player raised - when they raise, they always have it",
+          "Your hand is very strong but their raising range is extremely narrow",
+          "Call and re-evaluate - they almost never raise without the nuts",
+        ];
+        altLines = ["Raise (only with absolute nuts)", "Fold (if board is very scary)"];
+      } else {
+        action = "Fold"; sizing = null;
+        tag = "Fold to Passive Raise"; score = 86;
+        bullets = [
+          isCheckRaise
+            ? "A passive player check-raised - at live low-stakes this is always a monster"
+            : "A calling station / passive player raised - they NEVER do this without a premium hand",
+          "Their raise means the nuts or near-nuts - your hand is crushed",
+          "Fold immediately and save your stack",
+        ];
+        altLines = ["Call (only with the nuts or nut draw)"];
+      }
+    }
+    // TAG, Rec, Unknown: moderate adjustment - raise is credible but not always the nuts
+    else if (archetype === "tag" || archetype === "rec" || archetype === "unknown") {
+      if (hs >= 0.72) {
+        action = "Raise"; sizing = sz.raise || "2.5x";
+        tag = "Value Raise"; score = 78;
+        bullets = [
+          isCheckRaise
+            ? "Villain check-raised - evaluate board texture before committing more"
+            : "Villain raised - their range is strong but you are ahead with this hand",
+          "Raise for value and protection against their continuing range",
+          "Be prepared to fold to further aggression if the board is very wet",
+        ];
+        altLines = ["Call (pot control)", "Fold (nit-read override)"];
+      } else if (hs >= 0.48) {
+        action = "Call"; sizing = null;
+        tag = "Bluff Catch"; score = 70;
+        bullets = [
+          "Villain raised but your hand has sufficient showdown value to call",
+          "Folding would surrender too much equity in this pot",
+          "Call once and reassess - fold to continued aggression without improving",
+        ];
+        altLines = ["Fold (if read is very strong)", "Raise (only near-nut hands)"];
+      } else {
+        action = "Fold"; sizing = null;
+        tag = "Fold to Raise"; score = 76;
+        bullets = [
+          "Villain's raise represents significant strength from this player type",
+          "Without a strong hand, folding is the highest-EV play",
+          "Preserve your stack for better spots",
+        ];
+        altLines = ["Call (only with strong draw and pot odds)"];
+      }
+    }
+  }
+
   // - LIMPED POT POSTFLOP ADJUSTMENTS -
   // Based on live $1/$3 table dynamics:
   // 1. Flop bets in limped pots are often stabs - call lighter
@@ -1102,14 +1322,14 @@ function recommend(state) {
     }
   }
 
-  // - RIVER PLAY PATTERNS -
-  // Live-calibrated for $1/$3 tables:
-  //   Bet-bet-check (flop/turn then check river) = giving up, not trapping
-  //   Check-check-bet (passive then river bet) = very strong, slow-played monster
-  //   Small-small-BIG sizing escalation = two pair+ (very strong)
-  //   Scare card + bet = draw usually got there
-  //   Hero river bluffs = never at $1/$3 (population calls too much)
-  //   Thin value betting when checked to = recommended (addresses leak)
+  // - RIVER PLAY PATTERNS (ARCHETYPE-AWARE) -
+  // Live-calibrated for $1/$3 tables, now adjusted by villain archetype:
+  //   Check-check-bet: Nit/station = always nuts. Maniac = often bluff. Others = context.
+  //   Bet-bet-check: Nit = truly gave up. Maniac = might be trapping.
+  //   Sizing escalation: always strong regardless, but bluff frequency varies by type.
+  //   Scare card + bet: Nit = they have it. Maniac = could be bluffing the scare card.
+  //   Hero river bluffs: only vs nits (high fold freq). Never vs stations/maniacs.
+  //   Thin value when checked to: thinner vs nit, careful vs maniac (check-raise risk).
   let _river_tell = null;
 
   if (str === "river") {
@@ -1120,70 +1340,181 @@ function recommend(state) {
     const vilTurnCheckR = (vilAction||[]).find(a => a.street === "turn" && a.actor === "Villain" && a.type === "check");
     const vilRiverCheckR = (vilAction||[]).find(a => a.street === "river" && a.actor === "Villain" && a.type === "check");
 
-    // Pattern 1: Bet-bet-check = giving up. Hero should value bet with any showdown hand.
+    // Archetype groups for river pattern interpretation
+    const isPassiveType = archetype === "nit" || archetype === "station" || archetype === "loose_passive";
+    const isAggroType = archetype === "maniac" || archetype === "young_aggro";
+    const isBalancedType = archetype === "lag" || archetype === "tag" || archetype === "rec" || archetype === "unknown";
+
+    // Pattern 1: Bet-bet-check = usually giving up. Hero should value bet.
+    // Archetype twist: Maniacs/young aggro might be trapping with a river check.
     const betBetCheck = vilFlopBetR && vilTurnBetR && vilRiverCheckR && !vilRiverBetR;
     if (betBetCheck && checkedTo) {
-      if (hs >= 0.35 && (action === "Check" || !action)) {
-        action = "Bet"; sizing = "50%";
-        tag = "River Value (Villain Gave Up)";
-        score = 78;
-        bullets = [
-          "Villain bet flop and turn but checked the river - they are giving up",
-          "At live low-stakes, this almost always means they missed a draw or have a marginal hand",
-          "Bet for thin value - they will call with worse or fold, either outcome is profitable",
-        ];
-        _river_tell = "Bet-bet-check pattern - villain gave up on the river. Value bet with any showdown hand.";
-      } else if (hs >= 0.35) {
-        _river_tell = "Villain bet two streets then checked river - classic giving-up pattern. Value betting is profitable.";
+      if (isAggroType) {
+        // Maniac/young aggro checked river after betting two streets - could be trapping
+        if (hs >= 0.55 && (action === "Check" || !action)) {
+          action = "Bet"; sizing = "33%";
+          tag = "Cautious River Value";
+          score = 72;
+          bullets = [
+            "Villain bet flop and turn then checked river - but " + (archetype === "maniac" ? "maniacs" : "young aggro players") + " sometimes trap this way",
+            "A small bet extracts value from their missed draws while limiting your exposure",
+            "Keep sizing small - if they check-raise, you can fold without losing much",
+          ];
+          _river_tell = "Bet-bet-check from " + p.label + " - possible trap. Bet small for value but be cautious of check-raise.";
+        } else if (hs >= 0.35) {
+          action = "Check"; sizing = null;
+          tag = "Showdown Check";
+          score = 70;
+          bullets = [
+            "Villain bet two streets then checked - " + (archetype === "maniac" ? "maniacs" : "young aggro players") + " sometimes slow down with monsters",
+            "Your hand has showdown value but is not strong enough to bet safely",
+            "Check and take the showdown rather than risking a check-raise trap",
+          ];
+          _river_tell = "Bet-bet-check from " + p.label + " - could be trapping. Check for safe showdown.";
+        }
+      } else {
+        // Nit/station/balanced: bet-bet-check = genuinely giving up
+        if (hs >= 0.35 && (action === "Check" || !action)) {
+          const betSz = isPassiveType ? "50%" : "40%";
+          action = "Bet"; sizing = betSz;
+          tag = "River Value (Villain Gave Up)";
+          score = 78;
+          bullets = [
+            "Villain bet flop and turn but checked the river - they are giving up",
+            isPassiveType
+              ? "Passive players who stop betting have truly given up - bet confidently for value"
+              : "At live low-stakes, this almost always means they missed a draw or have a marginal hand",
+            "Bet for thin value - they will call with worse or fold, either outcome is profitable",
+          ];
+          _river_tell = "Bet-bet-check pattern from " + p.label + " - villain gave up. Value bet with any showdown hand.";
+        } else if (hs >= 0.35) {
+          _river_tell = "Villain bet two streets then checked river - classic giving-up pattern. Value betting is profitable.";
+        }
       }
     }
 
-    // Pattern 2: Check-check-bet = very strong (slow-played monster). Fold without a premium.
+    // Pattern 2: Check-check-bet = archetype-dependent strength signal.
+    // Nit/station: ALWAYS the nuts. Maniac: often a bluff. Others: usually strong.
     const checkCheckBet = vilFlopCheckR && vilTurnCheckR && vilRiverBetR && facingBet;
     if (checkCheckBet) {
-      if (hs < 0.80 && (action === "Call" || action === "Check" || action === "Bet" || action === "Raise")) {
-        action = "Fold"; sizing = null;
-        tag = "Fold to River Wake-Up";
-        score = 80;
-        bullets = [
-          "Villain checked two streets then suddenly bet the river - this is a very strong hand",
-          "At live low-stakes, this pattern almost always means they slow-played a monster",
-          "Fold without a premium hand - they want to get paid now",
-        ];
-        _river_tell = "Check-check-bet pattern - villain slow-played a strong hand. Only continue with very strong holdings.";
-      } else if (hs >= 0.80) {
-        _river_tell = "Villain checked two streets then bet river - slow-play pattern. Your hand is strong enough to continue.";
+      if (isPassiveType) {
+        // Nit/station/loose-passive: check-check-bet = absolute nuts, always
+        if (hs < 0.88 && (action === "Call" || action === "Check" || action === "Bet" || action === "Raise")) {
+          action = "Fold"; sizing = null;
+          tag = "Fold to Passive River Wake-Up";
+          score = 86;
+          bullets = [
+            "A " + p.label + " checked two streets then bet the river - this is ALWAYS the nuts",
+            "Passive players never bluff with this line - they were trapping you the entire time",
+            "Fold immediately - only the absolute nuts (top set, nut flush, nut straight) should continue",
+          ];
+          _river_tell = "Check-check-bet from " + p.label + " - the nuts 100% of the time. Fold everything.";
+        } else if (hs >= 0.88) {
+          _river_tell = "Check-check-bet from " + p.label + " - they have a monster, but your hand is strong enough to continue.";
+        }
+      } else if (isAggroType) {
+        // Maniac/young aggro: check-check-bet could easily be a bluff
+        if (hs >= 0.45) {
+          // Call wider - their river bet is NOT credible
+          if (action === "Fold") {
+            action = "Call"; sizing = null;
+            tag = "Bluff Catch vs River Stab";
+            score = 74;
+          } else if (!action || action === "Check") {
+            action = "Call"; sizing = null;
+            tag = "Bluff Catch vs River Stab";
+            score = 74;
+          }
+          bullets = [
+            "A " + (archetype === "maniac" ? "maniac" : "young aggro player") + " checked two streets then bet the river - this is often a bluff",
+            "Aggressive players use this line to steal pots they could not win at showdown",
+            "Your hand has showdown value - call and let them show you a bluff",
+          ];
+          _river_tell = "Check-check-bet from " + p.label + " - likely a bluff. Call with any showdown value.";
+        } else if (hs < 0.45 && hs >= 0.30) {
+          // Marginal - still more likely a bluff than from passive player
+          action = "Call"; sizing = null;
+          tag = "Light Call vs Aggro River";
+          score = 66;
+          bullets = [
+            (archetype === "maniac" ? "Maniacs" : "Young aggro players") + " bluff the river at a high frequency with this check-check-bet line",
+            "Your hand is marginal but their bluff frequency justifies a call",
+            "If wrong, the information is valuable for future hands against this player",
+          ];
+          _river_tell = "Check-check-bet from " + p.label + " - bluff frequency is high enough to call light.";
+        } else {
+          action = "Fold"; sizing = null;
+          tag = "Fold (No Equity)";
+          score = 70;
+          bullets = [
+            "Even against an aggressive river bluff, you need some showdown value to call",
+            "Your hand cannot beat any part of their range",
+            "Fold and wait for a spot where you can trap their aggression with a real hand",
+          ];
+          _river_tell = "Check-check-bet from " + p.label + " - likely a bluff, but you have no hand to call with.";
+        }
+      } else {
+        // TAG/Rec/Unknown/LAG: check-check-bet is usually strong but not always nuts
+        if (hs < 0.75 && (action === "Call" || action === "Check" || action === "Bet" || action === "Raise")) {
+          action = "Fold"; sizing = null;
+          tag = "Fold to River Wake-Up";
+          score = 78;
+          bullets = [
+            "Villain checked two streets then bet the river - this is usually a strong hand",
+            archetype === "lag"
+              ? "LAGs occasionally bluff this line, but at live low-stakes it is still mostly value"
+              : "At live low-stakes, this pattern almost always means they slow-played a monster",
+            "Fold without a premium hand - they want to get paid now",
+          ];
+          _river_tell = "Check-check-bet from " + p.label + " - likely strong. Fold without a premium.";
+        } else if (hs >= 0.75) {
+          _river_tell = "Check-check-bet from " + p.label + " - slow-play pattern. Your hand is strong enough to continue.";
+        }
       }
     }
 
     // Pattern 3: Sizing escalation (small-small-BIG) = two pair+ on the river.
+    // This is strong from ALL archetypes, but maniacs occasionally do it as a bluff.
     if (vilFlopBetR && vilTurnBetR && vilRiverBetR && facingBet) {
       const flopAmt = vilFlopBetR.amount ? parseFloat(vilFlopBetR.amount) : 0;
       const turnAmt = vilTurnBetR.amount ? parseFloat(vilTurnBetR.amount) : 0;
       const riverAmt = vilRiverBetR.amount ? parseFloat(vilRiverBetR.amount) : 0;
       if (flopAmt > 0 && turnAmt > 0 && riverAmt > 0 && riverAmt > turnAmt * 1.5 && riverAmt > flopAmt * 2) {
-        // River bet is significantly larger than prior streets = sizing escalation
-        if (hs < 0.75 && !_river_tell) {
+        if (isAggroType && hs >= 0.55 && !_river_tell) {
+          // Aggro players occasionally use sizing escalation as a bluff
+          action = "Call"; sizing = null;
+          tag = "Bluff Catch vs Sizing Escalation";
+          score = 68;
+          bullets = [
+            "Villain escalated sizing: small-small-BIG - usually two pair or better",
+            "But " + (archetype === "maniac" ? "maniacs" : "young aggro players") + " sometimes use this line as a polarized bluff",
+            "Your hand has enough showdown value to call - fold to any further aggression",
+          ];
+          _river_tell = "Sizing escalation from " + p.label + " - usually strong, but aggro players occasionally bluff this line.";
+        } else if (hs < 0.75 && !_river_tell) {
           action = "Fold"; sizing = null;
           tag = "Fold to Sizing Escalation";
           score = 82;
           bullets = [
             "Villain bet small on flop and turn, then bet big on the river - sizing escalation",
-            "At live low-stakes, this pattern signals two pair or better",
+            isPassiveType
+              ? "A " + p.label + " who escalates sizing on the river always has the nuts"
+              : "At live low-stakes, this pattern signals two pair or better",
             "They were building the pot quietly and now want maximum value",
           ];
-          _river_tell = "Small-small-BIG sizing escalation - villain has two pair+ and wants to get paid.";
+          _river_tell = "Small-small-BIG sizing escalation from " + p.label + " - villain has two pair+ and wants to get paid.";
         }
       }
     }
 
-    // Pattern 4: Scare card awareness. When flush/straight completes and villain bets, tighten up.
+    // Pattern 4: Scare card awareness. Archetype-adjusted.
+    // Nit/station + scare card bet = they made it. Maniac + scare card bet = could be bluffing the scare card.
     if (facingBet && board && board.length === 5 && !_river_tell) {
       const riverCard = board[4];
       const riverSuit = riverCard.suit;
       const boardSuits = board.map(c => c.suit);
       const suitCount = boardSuits.filter(s => s === riverSuit).length;
-      const flushCompleted = suitCount >= 3; // river made 3+ of one suit on board
+      const flushCompleted = suitCount >= 3;
 
       const boardRanks = board.map(c => RANKS.indexOf(c.rank)).sort((a,b) => a-b);
       const uniqueRanks = [...new Set(boardRanks)];
@@ -1192,52 +1523,142 @@ function recommend(state) {
         if (uniqueRanks[si] - uniqueRanks[si-1] === 1) { curRun++; if (curRun > bestRun) bestRun = curRun; }
         else curRun = 1;
       }
-      const straightPossible = bestRun >= 3; // 3+ consecutive on board = straight possible
+      const straightPossible = bestRun >= 3;
 
       if ((flushCompleted || straightPossible) && hs < 0.65) {
-        if (action === "Call") {
-          action = "Fold"; sizing = null;
-          tag = "Fold to Scare Card";
-          score = 76;
+        const drawLabel = flushCompleted ? "flush" : "straight";
+        if (isAggroType && hs >= 0.40) {
+          // Maniacs/young aggro bluff scare cards at high frequency
+          action = "Call"; sizing = null;
+          tag = "Bluff Catch vs Scare Card";
+          score = 68;
           bullets = [
-            flushCompleted
-              ? "A flush completed on the river and villain is betting - they usually have it"
-              : "A straight is possible on this board and villain is betting after it completed",
-            "At live low-stakes, river bets when draws complete are reliable tells",
-            "Fold without a strong hand - the draw got there",
+            "A " + drawLabel + " completed and " + (archetype === "maniac" ? "a maniac" : "a young aggro player") + " is betting - they bluff scare cards often",
+            "Aggressive players fire at draw-completing rivers whether they have it or not",
+            "Your hand has enough showdown value to catch their frequent bluffs",
           ];
-          _river_tell = (flushCompleted ? "Flush" : "Straight") + " completed on the river and villain is betting - usually means they got there.";
+          _river_tell = drawLabel.charAt(0).toUpperCase() + drawLabel.slice(1) + " completed and " + p.label + " is betting - they bluff scare cards frequently. Call with showdown value.";
+        } else {
+          if (action === "Call") {
+            action = "Fold"; sizing = null;
+            tag = "Fold to Scare Card";
+            score = 76;
+            bullets = [
+              flushCompleted
+                ? "A flush completed on the river and villain is betting - they usually have it"
+                : "A straight is possible on this board and villain is betting after it completed",
+              isPassiveType
+                ? "A " + p.label + " never bluffs when draws complete - they have it every time"
+                : "At live low-stakes, river bets when draws complete are reliable tells",
+              "Fold without a strong hand - the draw got there",
+            ];
+            _river_tell = drawLabel.charAt(0).toUpperCase() + drawLabel.slice(1) + " completed and " + p.label + " is betting - they have it.";
+          }
         }
       }
     }
 
-    // Pattern 5: Hero river bluff suppression. Never bluff the river at $1/$3.
+    // Pattern 5: Hero river bluff. Archetype-adjusted.
+    // vs Nit: small river bluffs CAN work (they fold at very high frequency)
+    // vs Station/maniac: NEVER bluff (they call everything)
+    // vs Others: generally suppress at live low-stakes
     if (action === "Bet" && hs < 0.35 && !_river_tell) {
-      action = "Check"; sizing = null;
-      tag = "No River Bluff";
-      score = 75;
-      bullets = [
-        "River bluffs do not work at live $1/$3 - the population calls too much",
-        "Check and accept the showdown result rather than investing more chips",
-        "Save your bluffing for earlier streets where fold equity exists",
-      ];
-      _river_tell = "River bluffs are -EV at live low-stakes. Check and take the showdown.";
+      if (archetype === "nit" && heroIsIP && hs >= 0.15) {
+        // Exception: river bluffs WORK against nits - they fold too much
+        action = "Bet"; sizing = "33%";
+        tag = "River Bluff vs Nit";
+        score = 70;
+        bullets = [
+          "Nits fold to river bets at an extremely high frequency - this bluff is profitable",
+          "Small sizing achieves the same fold equity as a large bet against this opponent",
+          "This is one of the few spots where a river bluff is +EV at live low-stakes",
+        ];
+        _river_tell = "River bluff vs Nit - profitable due to their high fold frequency.";
+      } else {
+        action = "Check"; sizing = null;
+        tag = "No River Bluff";
+        score = 75;
+        bullets = [
+          archetype === "station" || archetype === "loose_passive"
+            ? "Never bluff a calling station on the river - they call with anything"
+            : archetype === "maniac" || archetype === "young_aggro"
+            ? "Do not bluff aggressive players on the river - they may re-raise as a bluff"
+            : "River bluffs do not work at live $1/$3 - the population calls too much",
+          "Check and accept the showdown result rather than investing more chips",
+          "Save your bluffing for earlier streets where fold equity exists",
+        ];
+        _river_tell = "River bluffs are -EV vs " + p.label + " at live low-stakes. Check and take the showdown.";
+      }
     }
 
-    // Pattern 6: Thin value betting when checked to on the river.
-    // This addresses the identified leak: checking back too much with showdown value.
-    // When villain checks river, hero should bet thinner than instinct says.
+    // Pattern 6: Thin value betting when checked to on the river. Archetype-adjusted.
+    // vs Nit: value bet VERY thin (they check a wide range, call with the wrong hands)
+    // vs Maniac: careful - they check-raise rivers. Only bet strong.
+    // vs Station: value bet wide (they call everything)
     if (checkedTo && !_river_tell && hs >= 0.45 && hs < 0.72) {
-      if (action === "Check") {
-        action = "Bet"; sizing = "33%";
-        tag = "Thin River Value";
-        score = 72;
-        bullets = [
-          "Villain checked the river - they don't have a strong hand",
-          "A small value bet gets called by worse hands more often than you think",
-          "Checking back with showdown value leaves money on the table at live tables",
-        ];
-        _river_tell = "Thin value bet when checked to on the river - villain's check signals weakness, bet small for value.";
+      if (archetype === "maniac" || archetype === "young_aggro") {
+        // Careful with thin value vs aggro - check-raise risk
+        if (hs >= 0.60) {
+          action = "Bet"; sizing = "33%";
+          tag = "Thin River Value (Cautious)";
+          score = 70;
+          bullets = [
+            "Villain checked the river - but " + (archetype === "maniac" ? "maniacs" : "young aggro players") + " check-raise rivers",
+            "Your hand is strong enough to bet small and fold to a raise",
+            "Keep sizing minimal to limit your exposure to a check-raise bluff",
+          ];
+          _river_tell = "Thin value vs " + p.label + " - bet small but be ready to fold to a check-raise.";
+        } else if (action === "Bet") {
+          // Not strong enough to risk a check-raise - just check
+          action = "Check"; sizing = null;
+          tag = "Showdown Check";
+          score = 72;
+          bullets = [
+            (archetype === "maniac" ? "Maniacs" : "Young aggro players") + " check-raise rivers at high frequency",
+            "Your hand has showdown value but betting risks getting blown off it",
+            "Check and collect your showdown equity safely",
+          ];
+          _river_tell = "River check vs " + p.label + " - check-raise risk makes thin value bets -EV.";
+        }
+      } else if (archetype === "station" || archetype === "loose_passive") {
+        // Stations call everything - value bet wider
+        if (action === "Check" || !action) {
+          action = "Bet"; sizing = "50%";
+          tag = "Wide River Value vs Station";
+          score = 76;
+          bullets = [
+            "A " + p.label + " checked the river - they check their entire non-nut range",
+            "Bet wider than normal for value - they call with any pair, any draw that missed, and sometimes ace-high",
+            "You are leaving significant money on the table by checking back against this player type",
+          ];
+          _river_tell = "Thin value bet vs " + p.label + " - they call too wide. Bet for value with any showdown hand.";
+        }
+      } else if (archetype === "nit") {
+        // Nits check a very wide range on the river - bet thin, they call with worse
+        if (action === "Check" || !action) {
+          action = "Bet"; sizing = "25%";
+          tag = "Thin River Value vs Nit";
+          score = 74;
+          bullets = [
+            "Nit checked the river - their checking range is very weak",
+            "A tiny bet gets called by their marginal hands that they would never bet themselves",
+            "Even small value bets print money against a nit's passive river tendencies",
+          ];
+          _river_tell = "Thin value vs Nit - tiny bet extracts value from their weak checking range.";
+        }
+      } else {
+        // TAG/Rec/Unknown/LAG: standard thin value
+        if (action === "Check") {
+          action = "Bet"; sizing = "33%";
+          tag = "Thin River Value";
+          score = 72;
+          bullets = [
+            "Villain checked the river - they don't have a strong hand",
+            "A small value bet gets called by worse hands more often than you think",
+            "Checking back with showdown value leaves money on the table at live tables",
+          ];
+          _river_tell = "Thin value bet when checked to on the river - villain's check signals weakness, bet small for value.";
+        }
       }
     }
   }
@@ -3269,7 +3690,57 @@ function recommendPreflop(state) {
 
   // - UNOPENED -
   if (situation === "unopened") {
-    if (isPremium || (isBroadway && topRank <= 2)) {
+    const isBB = heroPos === "BB" || heroPos === "bb";
+
+    // === BB SPECIAL CASE: Unopened pot ===
+    // BB has already posted the big blind. The pot is NOT unopened from BB's perspective.
+    // BB NEVER "Open Raises"  -  BB either checks (free flop) or raises to build/protect.
+    // This gate must come BEFORE any hand-strength branching to prevent fallthrough.
+    if (isBB) {
+      // BB premium definition is TIGHTER than general isPremium.
+      // True BB raise hands: AA, KK, QQ, AKs, AKo - hands that lose value multiway.
+      // Hands like JTs, KJs, QJs are strong but play better as traps from BB.
+      const isBBRaisePremium = (isPair && topRank <= 2) || // AA, KK, QQ
+        (topRank === 0 && Math.max(r1,r2) <= 1); // AK suited or offsuit
+      if (isBBRaisePremium) {
+        // True premiums: raise to build pot and thin the field
+        action = "Raise"; actionType = "Raise";
+        sizing = "$" + Math.round(getPreflopOpenMultiplier(bb, archetype) * bb);
+        tag = "BB Raise for Value"; score = 88;
+        bullets = [
+          "You are in the big blind with a premium hand - raise to build the pot",
+          "Checking lets the entire field see a free flop with random hands",
+          "Raising thins the field and charges speculative hands to continue",
+        ];
+        altLines = ["Check (trap - disguise premium, let villain catch up)"];
+      } else if (isPremium || (hs >= 0.52 && (isBroadway || isSpeculative))) {
+        // Strong but non-raise-premium hands (JJ, TT, AQs, KQs, JTs, suited connectors):
+        // Default to check/trap from BB - these hands play well multiway and benefit from deception
+        action = "Check"; actionType = "Check"; sizing = null;
+        tag = "BB Trap / Free Flop"; score = 78;
+        bullets = [
+          "You are in the big blind - you have a free option with a strong hand",
+          "Checking disguises hand strength and keeps villain's wide range in",
+          "These hands play well multiway - trapping is higher EV than raising OOP",
+        ];
+        altLines = ["Raise to $" + Math.round(getPreflopOpenMultiplier(bb, archetype) * bb) + " (protection / thin the field)"];
+      } else {
+        // All other hands: check for free, never fold, never open raise
+        action = "Check"; actionType = "Check"; sizing = null;
+        tag = "Free Flop"; score = 72;
+        bullets = [
+          "You are in the big blind - checking is free, never fold when you can see the flop",
+          "Hand is " + (hs >= 0.52 ? "playable" : "marginal") + " but you have pot odds with $" + bb + " already invested",
+          "Look to connect with the flop before committing more chips",
+        ];
+        altLines = hs >= 0.52
+          ? ["Raise to $" + Math.round(getPreflopOpenMultiplier(bb, archetype) * bb) + " (thin the field)"]
+          : ["Check is the only correct play here"];
+      }
+    }
+
+    // === ALL OTHER POSITIONS: Standard unopened logic ===
+    else if (isPremium || (isBroadway && topRank <= 2)) {
       action = "Open Raise"; actionType = "Open Raise";
       // Archetype-aware open raise sizing
       sizing = "$" + Math.round(getPreflopOpenMultiplier(bb, archetype) * bb);
@@ -3281,29 +3752,15 @@ function recommendPreflop(state) {
       ];
       altLines = ["Open to 6x (very loose table)", "Open to 4x (tight table)"];
     } else if (oopMultiway && hs < 0.58 && !isPremium) {
-      // OOP against 3+ opponents: SB folds marginal hands, BB checks for free
-      const isBB = heroPos === "BB" || heroPos === "bb";
-      if (isBB && (situation === "unopened" || situation === "one_limper" || situation === "two_limpers")) {
-        // BB already posted - check is free, never fold
-        action = "Check"; actionType = "Check"; sizing = null;
-        tag = "Free Flop"; score = 72;
-        bullets = [
-          "You are in the big blind - checking is free, never fold when you can see the flop",
-          "Hand is marginal but you have pot odds with $" + bb + " already invested",
-          "Look to flop two pair, trips, or a strong draw before committing more chips",
-        ];
-        altLines = ["Raise (only with strong hands to thin the field)"];
-      } else {
-        // SB or other OOP positions: fold marginal hands
-        action = "Fold"; actionType = "Fold"; sizing = null;
-        tag = "OOP Multiway Fold"; score = 78;
-        bullets = [
-          "Out of position against " + pLeft + " opponents - marginal hands lose money",
-          "Playing " + (heroCards[0]?.rank||"") + (heroCards[1]?.rank||"") + " OOP in a multiway pot has poor equity realization",
-          "Save your stack for better spots with position or stronger hands",
-        ];
-        altLines = ["Complete (only with suited connectors for implied odds)"];
-      }
+      // SB or other OOP positions against 3+ opponents: fold marginal hands
+      action = "Fold"; actionType = "Fold"; sizing = null;
+      tag = "OOP Multiway Fold"; score = 78;
+      bullets = [
+        "Out of position against " + pLeft + " opponents - marginal hands lose money",
+        "Playing " + (heroCards[0]?.rank||"") + (heroCards[1]?.rank||"") + " OOP in a multiway pot has poor equity realization",
+        "Save your stack for better spots with position or stronger hands",
+      ];
+      altLines = ["Complete (only with suited connectors for implied odds)"];
     } else if (hs >= 0.52 || isSpeculative) {
       action = "Open Raise"; actionType = "Open Raise";
       // Same sizing as premium opens - consistent sizing prevents reads
@@ -3332,8 +3789,51 @@ function recommendPreflop(state) {
     const limpCount = situation === "two_limpers" ? 2 : 1;
     const isoSize = getIsoSize(bb, situation, tableType, archetype);
     const foldToIso = field.fold_to_iso * (stickiness === "high" ? 0.7 : stickiness === "low" ? 1.2 : 1.0);
+    const isBBLimp = heroPos === "BB" || heroPos === "bb";
 
-    if (isPremium || (hs >= 0.60 && isBroadway)) {
+    // === BB SPECIAL CASE: Facing limpers ===
+    // BB has already posted. With limpers, BB checks for free or raises strong hands.
+    // BB NEVER folds when facing only limpers  -  checking costs nothing.
+    if (isBBLimp) {
+      // Same tighter premium for BB raise as in the unopened block
+      const isBBLimpRaisePremium = (isPair && topRank <= 2) || // AA, KK, QQ
+        (topRank === 0 && Math.max(r1,r2) <= 1); // AK
+      if (isBBLimpRaisePremium) {
+        // True premiums: raise to iso and build pot
+        action = "Raise"; actionType = "Raise";
+        sizing = isoSize;
+        tag = "BB Raise vs Limpers"; score = 85;
+        bullets = [
+          "You are in the big blind with a premium hand and " + limpCount + " limper" + (limpCount>1?"s":"") + " in",
+          "Raising thins the field and charges speculative hands to continue",
+          "Limpers' ranges are wide and capped - you dominate them",
+        ];
+        altLines = ["Check (trap - disguise hand, play multiway)"];
+      } else if (isPremium || (hs >= 0.52 && (isBroadway || isSpeculative))) {
+        // Strong hands (JTs, KQs, JJ, TT, etc): check/trap, raise is alt line
+        action = "Check"; actionType = "Check"; sizing = null;
+        tag = "BB Trap vs Limpers"; score = 76;
+        bullets = [
+          "You are in the big blind with a strong hand - checking disguises your strength",
+          "With " + limpCount + " limper" + (limpCount>1?"s":"") + " in, trapping builds a bigger pot when you connect",
+          "Raising OOP bloats the pot against wide ranges that call too much",
+        ];
+        altLines = ["Raise to " + isoSize + " (thin the field)"];
+      } else {
+        // Weak hands: still check for free, never fold
+        action = "Check"; actionType = "Check"; sizing = null;
+        tag = "Free Flop"; score = 68;
+        bullets = [
+          "You are in the big blind - checking is free, never fold when you can see the flop",
+          "Your $" + bb + " is already in the pot - see the flop and look for a strong connection",
+          "Do not raise to isolate OOP with a marginal hand against " + limpCount + " caller" + (limpCount>1?"s":""),
+        ];
+        altLines = ["Check is the only correct play here"];
+      }
+    }
+
+    // === ALL OTHER POSITIONS: Standard limper logic ===
+    else if (isPremium || (hs >= 0.60 && isBroadway)) {
       action = "Isolate Raise"; actionType = "Isolate Raise";
       sizing = isoSize;
       tag = "Iso Value"; score = 85;
@@ -3344,27 +3844,15 @@ function recommendPreflop(state) {
       ];
       altLines = ["Overlimp (suited connectors only)", "Raise bigger vs sticky table"];
     } else if (oopMultiway && hs < 0.58 && !isPremium) {
-      // OOP against 3+ opponents with limpers: BB checks free, SB folds
-      const isBB = heroPos === "BB" || heroPos === "bb";
-      if (isBB) {
-        action = "Check"; actionType = "Check"; sizing = null;
-        tag = "Free Flop"; score = 72;
-        bullets = [
-          "You are in the big blind - checking is free with " + limpCount + " limper" + (limpCount>1?"s":"") + " in",
-          "Your $" + bb + " is already in the pot - see the flop and look for a strong connection",
-          "Do not raise to isolate OOP with a marginal hand against multiple callers",
-        ];
-        altLines = ["Raise (only premiums to thin the field)"];
-      } else {
-        action = "Fold"; actionType = "Fold"; sizing = null;
-        tag = "OOP Multiway Fold"; score = 76;
-        bullets = [
-          "Out of position against " + pLeft + " opponents including limpers",
-          "Iso-raising OOP bloats the pot while you act first on every street",
-          "Even completing the blind is marginal - fold preserves stack for better spots",
-        ];
-        altLines = ["Complete (only pocket pairs or suited connectors for set/straight value)"];
-      }
+      // SB or other OOP positions against 3+ opponents: fold marginal hands
+      action = "Fold"; actionType = "Fold"; sizing = null;
+      tag = "OOP Multiway Fold"; score = 76;
+      bullets = [
+        "Out of position against " + pLeft + " opponents including limpers",
+        "Iso-raising OOP bloats the pot while you act first on every street",
+        "Even completing the blind is marginal - fold preserves stack for better spots",
+      ];
+      altLines = ["Complete (only pocket pairs or suited connectors for set/straight value)"];
     } else if (isSpeculative && foldToIso < 0.45) {
       action = "Overlimp"; actionType = "Overlimp";
       sizing = "$" + bb;
@@ -3459,22 +3947,22 @@ function recommendPreflop(state) {
         action = "Fold"; actionType = "Fold"; sizing = null;
         tag = "Fold vs Nit Raise"; score = 82;
         bullets = [
-          "A nit's raising range is AA, KK, QQ — your hand has no equity",
+          "A nit's raising range is AA, KK, QQ  -  your hand has no equity",
           "Even speculative hands have poor implied odds vs a nit's narrow postflop range",
           "This is one of the most profitable folds in poker - discipline saves money",
         ];
         altLines = [];
       }
     } else if (archetype === "maniac" || archetype === "young_aggro") {
-      // Maniacs/aggro raise wide — 3-bet wider for value
+      // Maniacs/aggro raise wide  -  3-bet wider for value
       if (is3BetPremium || (hs >= 0.55 && isBroadway)) {
         action = "3-Bet"; actionType = "3-Bet";
         sizing = "$" + threeBetSize;
         tag = "3-Bet Value vs Aggro"; score = 88;
         bullets = [
-          (archetype === "maniac" ? "Maniacs" : "Young aggro players") + " raise with a very wide range — your hand is well ahead",
-          "3-bet large for value — they call or 4-bet with weak holdings",
-          "Do not just flat — build the pot now while you are ahead of their range",
+          (archetype === "maniac" ? "Maniacs" : "Young aggro players") + " raise with a very wide range  -  your hand is well ahead",
+          "3-bet large for value  -  they call or 4-bet with weak holdings",
+          "Do not just flat  -  build the pot now while you are ahead of their range",
         ];
         altLines = ["Flat call (trap, deep stacks)"];
       } else if (hs >= 0.45 && (isSuited || isPair)) {
@@ -3492,7 +3980,7 @@ function recommendPreflop(state) {
         tag = "Fold vs Aggro"; score = 72;
         bullets = [
           "Even against a wide raiser, your hand lacks sufficient equity",
-          "Discipline is key — wait for a stronger hand to punish their aggression",
+          "Discipline is key  -  wait for a stronger hand to punish their aggression",
           "Their wide range does not make your weak hand profitable",
         ];
         altLines = [];
@@ -3506,9 +3994,9 @@ function recommendPreflop(state) {
         bullets = [
           "Premium hand has strong equity vs raiser's opening range",
           vilOpenDollars > 0 ? "3-bet to $" + threeBetSize + " (" + (Math.round(threeBetMult*10)/10) + "x their $" + vilOpenDollars + " open) to isolate" : "3-bet large enough to isolate - size based on opponent tendencies",
-          archetype === "station" ? "Calling stations call 3-bets too wide — this is pure value" :
-          archetype === "lag" ? "LAGs open wide — your 3-bet is highly profitable vs their range" :
-          "Expect 1-2 callers even with this sizing — your hand dominates their calling range",
+          archetype === "station" ? "Calling stations call 3-bets too wide  -  this is pure value" :
+          archetype === "lag" ? "LAGs open wide  -  your 3-bet is highly profitable vs their range" :
+          "Expect 1-2 callers even with this sizing  -  your hand dominates their calling range",
         ];
         altLines = ["Flat call (trapping, deep stacks)"];
       } else if (hs >= 0.45 && (isSuited || isPair)) {
@@ -3517,7 +4005,7 @@ function recommendPreflop(state) {
         tag = "Speculative Call"; score = 62;
         bullets = [
           "Hand has implied odds and set/flush potential",
-          "Do not 3-bet — at live low-stakes, 3-bets get called multi-way and you need a premium to justify the bloated pot",
+          "Do not 3-bet  -  at live low-stakes, 3-bets get called multi-way and you need a premium to justify the bloated pot",
           "Call and look to flop a strong made hand cheaply",
         ];
         altLines = ["Fold (out of position)", "3-Bet (only with premium blockers)"];
@@ -3534,43 +4022,239 @@ function recommendPreflop(state) {
     }
   }
 
-  // - RAISE + CALLER (SQUEEZE SPOT) -
+  // - RAISE + CALLER (SQUEEZE SPOT) - ARCHETYPE-AWARE -
+  // Squeeze sizing and range should adjust based on WHO raised and the table dynamics.
+  // vs Nit open: nit has a narrow range, squeeze only premiums (they aren't folding AA/KK)
+  // vs Maniac open: wide range, squeeze wider for value, but they may 4-bet/shove
+  // vs Station caller: they flat squeezes with any pair, squeeze only for value
+  // vs LAG open: wide open range means squeeze is profitable, but they fight back
   else if (situation === "raise_caller") {
     const squeezeEV = field.fold_to_squeeze * stickyMod;
-    // Squeeze sizing: 4x villain's open (one caller adds dead money)
-    const squeezeMult = 4;
+
+    // Archetype-aware squeeze sizing multiplier
+    // Base: 4x the open. Adjust based on raiser tendencies.
+    const squeezeSizeAdj = {
+      nit:           3.0,   // Size DOWN - nit's range is narrow, save chips. They 4-bet or fold.
+      station:       5.0,   // Size UP - stations call squeezes with anything, charge maximum
+      loose_passive: 4.5,   // Size UP - passive callers continue too wide
+      rec:           4.5,   // Size UP - recs call light
+      maniac:        4.0,   // Standard - they may shove over, keep sizing controlled
+      young_aggro:   3.5,   // Slightly smaller - they 4-bet frequently, limit exposure
+      lag:           3.5,   // Slightly smaller - LAGs fight back with 4-bets
+      tag:           4.0,   // Standard sizing vs balanced raiser
+      unknown:       4.0,
+    };
+    const squeezeMult = squeezeSizeAdj[archetype] || 4.0;
     const squeezeSize = vilOpenDollars > 0
       ? Math.round(vilOpenDollars * squeezeMult)
       : Math.round(bb * (bb <= 3 ? 14 : 12));
-    if (isPremium && topRank <= 2) {
-      action = "Squeeze"; actionType = "Squeeze";
-      sizing = "$" + squeezeSize;
-      tag = "Squeeze Value"; score = 88;
-      bullets = [
-        "Premium hand vs two opponents - squeeze builds maximum pot",
-        "Raiser and caller have capped ranges vs a squeeze",
-        "Large sizing charges both players to continue",
-      ];
-      altLines = ["Flat (trap deep stacks)"];
-    } else if (squeezeEV > 0.50 && (hs >= 0.55 || (isSuited && isBroadway))) {
-      action = "Squeeze"; actionType = "Squeeze";
-      sizing = "$" + Math.round(squeezeSize * 0.85);
-      tag = "Squeeze Bluff / Semi-Bluff"; score = 74;
-      bullets = [
-        Math.round(field.fold_to_squeeze * 100) + "% fold frequency makes squeeze profitable",
-        "Caller caps their range - they rarely continue to a squeeze",
-        "When called, hand has playability and equity",
-      ];
-      altLines = ["Fold (sticky table, weak hand)", "Flat (position, deep)"];
+
+    // Archetype-aware squeeze thresholds
+    // The raiser's archetype changes how wide we can profitably squeeze
+    if (archetype === "nit") {
+      // Nit opened then got a caller. Nit has AA-QQ, AKs type range.
+      // Squeezing light is suicidal - nit 4-bets premiums. Only squeeze with the top.
+      if (isPremium && topRank <= 1) {
+        // AA/KK only - the only hands ahead of a nit's opening range
+        action = "Squeeze"; actionType = "Squeeze";
+        sizing = "$" + squeezeSize;
+        tag = "Squeeze Value vs Nit"; score = 86;
+        bullets = [
+          "Nit opened - their range is extremely narrow (AA, KK, QQ, AKs)",
+          "You have the only hands that dominate their range - squeeze for value",
+          "Smaller sizing is correct - they either 4-bet (you want that) or fold",
+        ];
+        altLines = ["Flat (disguise hand, play postflop)"];
+      } else if (isPremium && topRank <= 2) {
+        // QQ, AK - flat rather than squeeze. Nit 4-bets only better hands.
+        action = "Flat Call"; actionType = "Flat Call"; sizing = null;
+        tag = "Flat vs Nit Open"; score = 78;
+        bullets = [
+          "Nit opened - squeezing with QQ/AK is risky because they only 4-bet AA/KK",
+          "Flatting keeps their entire opening range in and plays well postflop",
+          "If you squeeze and they 4-bet, you are in a tough spot with a hand behind their range",
+        ];
+        altLines = ["Squeeze to $" + squeezeSize + " (if nit folds to squeezes often)"];
+      } else {
+        action = "Fold"; actionType = "Fold"; sizing = null;
+        tag = "Fold vs Nit Open"; score = 82;
+        bullets = [
+          "A nit opened and got a caller - entering this pot without a premium is -EV",
+          "The raiser has a very strong range and will not fold to a squeeze",
+          "Fold and wait for a spot where you have a clear edge",
+        ];
+        altLines = ["Flat (only pocket pairs for set value, in position)"];
+      }
+    } else if (archetype === "maniac") {
+      // Maniac opened wide then got a caller. Squeeze range is WIDER for value.
+      // But maniacs 4-bet/shove over squeezes - only squeeze hands you can play all-in.
+      if (isPremium) {
+        action = "Squeeze"; actionType = "Squeeze";
+        sizing = "$" + squeezeSize;
+        tag = "Squeeze Value vs Maniac"; score = 90;
+        bullets = [
+          "Maniac opened with a very wide range - your premium hand dominates",
+          "Squeeze to build the pot - they may call or shove with much worse",
+          "Be prepared to play for stacks - maniacs do not fold to squeezes",
+        ];
+        altLines = ["Flat (trap, let them barrel postflop)"];
+      } else if (hs >= 0.50 || (isSuited && isBroadway)) {
+        action = "Squeeze"; actionType = "Squeeze";
+        sizing = "$" + squeezeSize;
+        tag = "Squeeze Exploit vs Maniac"; score = 78;
+        bullets = [
+          "Maniac's opening range is extremely wide - your hand has strong equity against it",
+          "The caller also has a capped range flatting behind a maniac open",
+          "If the maniac shoves, you have a decision - but the squeeze is profitable long-term",
+        ];
+        altLines = ["Flat (in position, deep stacks)", "Fold (if maniac is 4-betting at very high frequency)"];
+      } else if (isSpeculative && heroIsIP) {
+        action = "Flat Call"; actionType = "Flat Call"; sizing = null;
+        tag = "Speculative Flat vs Maniac"; score = 66;
+        bullets = [
+          "Speculative hand in position against a maniac open - flat for implied odds",
+          "Squeezing risks a shove you cannot call without a premium",
+          "Play postflop and let the maniac over-commit with worse",
+        ];
+        altLines = ["Fold (out of position)"];
+      } else {
+        action = "Fold"; actionType = "Fold"; sizing = null;
+        tag = "Fold vs Maniac Raise"; score = 72;
+        bullets = [
+          "Hand does not justify entering a multiway pot even against a maniac open",
+          "The caller behind may have a strong hand trapping the maniac",
+          "Fold and wait for a hand you can squeeze profitably",
+        ];
+        altLines = ["Squeeze (only with strong hands that play well all-in)"];
+      }
+    } else if (archetype === "young_aggro") {
+      // Young aggro opens wide but 4-bets frequently. Squeeze tighter than vs maniac.
+      if (isPremium && topRank <= 2) {
+        action = "Squeeze"; actionType = "Squeeze";
+        sizing = "$" + squeezeSize;
+        tag = "Squeeze Value vs Young Aggro"; score = 88;
+        bullets = [
+          "Young aggro opened wide - your premium hand has a large equity edge",
+          "They 4-bet frequently, which is fine - you want to play a big pot with premiums",
+          "Smaller sizing limits exposure if they shove with air",
+        ];
+        altLines = ["Flat (disguise, play postflop)"];
+      } else if (squeezeEV > 0.50 && (hs >= 0.58 || (isSuited && isBroadway && topRank <= 2))) {
+        action = "Squeeze"; actionType = "Squeeze";
+        sizing = "$" + Math.round(squeezeSize * 0.90);
+        tag = "Squeeze Semi-Bluff vs Young Aggro"; score = 74;
+        bullets = [
+          "Young aggro's open range is wide enough that squeeze fold equity is high",
+          "Size slightly smaller to limit exposure - they 4-bet at above average frequency",
+          Math.round(field.fold_to_squeeze * 100) + "% fold frequency justifies the squeeze with this hand",
+        ];
+        altLines = ["Flat (in position)", "Fold (if 4-bet frequency is very high)"];
+      } else {
+        action = "Fold"; actionType = "Fold"; sizing = null;
+        tag = "Fold vs Young Aggro Squeeze Spot"; score = 76;
+        bullets = [
+          "Young aggro's 4-bet frequency makes light squeezing risky",
+          "Without a premium hand, folding avoids bloating pots OOP against an aggressive player",
+          "Wait for premiums to squeeze this player type profitably",
+        ];
+        altLines = ["Flat (only pocket pairs for set value, in position)"];
+      }
+    } else if (archetype === "station" || archetype === "loose_passive" || archetype === "rec") {
+      // Stations/passive/recs call squeezes way too wide. Squeeze ONLY for value (never bluff).
+      if (isPremium) {
+        action = "Squeeze"; actionType = "Squeeze";
+        sizing = "$" + squeezeSize;
+        tag = "Squeeze Value vs Caller Type"; score = 88;
+        bullets = [
+          (archetype === "station" ? "Calling station" : archetype === "rec" ? "Recreational player" : "Loose passive player") + " opened - they call squeezes with any pair or broadway",
+          "Size UP to maximum - they will call with dominated hands",
+          "This is pure value - build the pot with your premium against their wide calling range",
+        ];
+        altLines = ["Flat (only if very deep and want to play postflop)"];
+      } else if (hs >= 0.60 && isBroadway) {
+        action = "Squeeze"; actionType = "Squeeze";
+        sizing = "$" + squeezeSize;
+        tag = "Squeeze Thin Value vs Caller"; score = 76;
+        bullets = [
+          "Strong broadway hand vs a player type that calls squeezes too wide",
+          "Your hand dominates the range they continue with",
+          "Do NOT squeeze as a bluff vs this type - they never fold",
+        ];
+        altLines = ["Flat (in position with deep stacks)"];
+      } else {
+        action = "Fold"; actionType = "Fold"; sizing = null;
+        tag = "Fold vs Station Squeeze Spot"; score = 76;
+        bullets = [
+          "Bluff squeezes are worthless against players who never fold",
+          "Without a value hand, entering this pot multiway is -EV",
+          "Only squeeze for value against calling station types",
+        ];
+        altLines = ["Flat (pocket pairs in position for set value)"];
+      }
+    } else if (archetype === "lag") {
+      // LAG opened wide, similar to maniac but more balanced. Squeeze a bit wider than default.
+      if (isPremium) {
+        action = "Squeeze"; actionType = "Squeeze";
+        sizing = "$" + squeezeSize;
+        tag = "Squeeze Value vs LAG"; score = 88;
+        bullets = [
+          "LAG opened with a wide range - your premium hand dominates",
+          "Squeeze to build the pot and isolate the LAG's wide range",
+          "They may 4-bet, but with a premium you welcome the action",
+        ];
+        altLines = ["Flat (deep stacks, disguise)"];
+      } else if (squeezeEV > 0.48 && (hs >= 0.55 || (isSuited && isBroadway))) {
+        action = "Squeeze"; actionType = "Squeeze";
+        sizing = "$" + Math.round(squeezeSize * 0.90);
+        tag = "Squeeze Bluff / Semi-Bluff"; score = 74;
+        bullets = [
+          "LAG's wide open range gives your squeeze strong fold equity",
+          "Slightly smaller sizing limits exposure vs their 4-bet range",
+          Math.round(field.fold_to_squeeze * 100) + "% fold frequency makes this squeeze profitable",
+        ];
+        altLines = ["Flat (in position)", "Fold (sticky table)"];
+      } else {
+        action = "Fold"; actionType = "Fold"; sizing = null;
+        tag = "Fold vs LAG Squeeze Spot"; score = 74;
+        bullets = [
+          "Hand does not meet squeeze threshold against a LAG opener",
+          "LAGs fight back with 4-bets more than passive players",
+          "Fold and wait for a stronger hand to squeeze this player type",
+        ];
+        altLines = ["Flat (pocket pairs for set value)"];
+      }
     } else {
-      action = "Fold"; actionType = "Fold"; sizing = null;
-      tag = "Fold to Squeeze Pressure"; score = 75;
-      bullets = [
-        "Hand does not justify entering a 3-way pot vs raise + call",
-        "Squeeze risk is high - pot odds do not compensate",
-        "Wait for a premium hand before entering raised + called pots",
-      ];
-      altLines = ["Flat (premium pairs only, in position)"];
+      // TAG / Unknown: standard squeeze logic with archetype-aware sizing
+      if (isPremium && topRank <= 2) {
+        action = "Squeeze"; actionType = "Squeeze";
+        sizing = "$" + squeezeSize;
+        tag = "Squeeze Value"; score = 88;
+        bullets = [
+          "Premium hand vs two opponents - squeeze builds maximum pot",
+          "Raiser and caller have capped ranges vs a squeeze",
+          "Large sizing charges both players to continue",
+        ];
+        altLines = ["Flat (trap deep stacks)"];
+      } else if (squeezeEV > 0.50 && (hs >= 0.55 || (isSuited && isBroadway))) {
+        action = "Squeeze"; actionType = "Squeeze";
+        sizing = "$" + Math.round(squeezeSize * 0.85);
+        tag = "Squeeze Bluff / Semi-Bluff"; score = 74;
+        bullets = [
+          Math.round(field.fold_to_squeeze * 100) + "% fold frequency makes squeeze profitable",
+          "Caller caps their range - they rarely continue to a squeeze",
+          "When called, hand has playability and equity",
+        ];
+        altLines = ["Fold (sticky table, weak hand)", "Flat (position, deep)"];
+      } else {
+        action = "Fold"; actionType = "Fold"; sizing = null;
+        tag = "Fold to Squeeze Pressure"; score = 75;
+        bullets = [
+          "Hand does not justify entering a 3-way pot vs raise + call",
+          "Squeeze risk is high - pot odds do not compensate",
+          "Wait for a premium hand before entering raised + called pots",
+        ];
+        altLines = ["Flat (premium pairs only, in position)"];
+      }
     }
   }
 
@@ -10404,7 +11088,7 @@ export default function RangeIQ() {
         </div>
       </div>
 
-      {/* ══════ Share an Idea — Feedback Button ══════ */}
+      {/* ══════ Share an Idea  -  Feedback Button ══════ */}
       {!showFeedback && (
         <div
           onClick={()=>setShowFeedback(true)}
@@ -10457,7 +11141,7 @@ export default function RangeIQ() {
                   type="email"
                   value={feedbackEmail}
                   onChange={e=>setFeedbackEmail(e.target.value)}
-                  placeholder="Email (optional — if you want us to follow up)"
+                  placeholder="Email (optional  -  if you want us to follow up)"
                   style={{
                     width:"100%", height:44, padding:"0 14px", borderRadius:12, marginTop:10,
                     background:C.bg, border:`1px solid ${C.border}`, color:C.text,
