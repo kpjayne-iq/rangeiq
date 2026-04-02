@@ -6384,7 +6384,7 @@ const BASE_CSS = `
   @media(max-width:768px) {
     .riq-main-grid { grid-template-columns:1fr !important; }
     .riq-builder-grid { grid-template-columns:1fr !important; }
-    .riq-edit-drawer { width:100% !important; max-width:100% !important; }
+    .riq-edit-drawer { width:100% !important; max-width:100% !important; height:100dvh !important; }
     .riq-home-grid { grid-template-columns:1fr !important; }
     .riq-home-stats { gap:24px !important; }
   }
@@ -9155,7 +9155,7 @@ export default function RangeIQ() {
         {/* - EDIT SPOT DRAWER - */}
         {drawerOpen&&(
           <div className="riq-edit-drawer" style={{
-            position:"fixed", top:0, left:0, height:"100vh", width:320,
+            position:"fixed", top:0, left:0, bottom:0, width:320,
             background:C.card, borderRight:"1px solid "+C.border,
             zIndex:150, overflow:"hidden", display:"flex", flexDirection:"column",
             boxShadow:"4px 0 24px rgba(0,0,0,0.5)",
@@ -9398,7 +9398,7 @@ export default function RangeIQ() {
             </div>
 
             {/* GROUP 4: CTA - sticky at bottom */}
-            <div style={{ padding:"12px 16px", borderTop:"1px solid "+C.border, flexShrink:0 }}>
+            <div style={{ padding:"12px 16px", paddingBottom:"calc(12px + env(safe-area-inset-bottom, 0px))", borderTop:"1px solid "+C.border, flexShrink:0, background:C.card }}>
               <Btn variant="primary" onClick={()=>{ runAnalysis(); setDrawerOpen(false); }} disabled={!heroCards[0]||!heroCards[1]} style={{ width:"100%", padding:"13px", fontSize:14, fontWeight:700, borderRadius:8 }}>
                 {loading?"Analyzing...":"Get Recommendation"}
               </Btn>
