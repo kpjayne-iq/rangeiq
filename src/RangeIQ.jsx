@@ -61,6 +61,7 @@ function UpgradeCard({ headline, description, featureContext, style }) {
         letterSpacing: "0.04em", boxShadow: "0 4px 16px rgba(217,185,91,0.35)",
       }}>Unlock Full IQ \u2014 {FREE_TIER.monthlyPrice}/mo</a>
       <div style={{ fontSize: 11, color: "#6B7280", marginTop: 8 }}>or {FREE_TIER.yearlyPrice}/year (save {FREE_TIER.yearlySavings})</div>
+      <div style={{ fontSize: 11, color: "#10B981", fontWeight: 600, marginTop: 8 }}>Free through June 1 \u2014 your card won\u2019t be charged until then.</div>
     </div>
   );
 }
@@ -116,6 +117,7 @@ function VillainLockedTooltip({ archetype, onClose }) {
         </div>
         <a href={FREE_TIER.stripeLink} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", width: "100%", padding: "13px 0", borderRadius: 8, background: "linear-gradient(135deg, #D9B95B 0%, #c9a440 100%)", color: "#111827", fontSize: 14, fontWeight: 700, textDecoration: "none", boxShadow: "0 4px 16px rgba(217,185,91,0.35)" }}>Unlock Full IQ \u2014 {FREE_TIER.monthlyPrice}/mo</a>
         <div style={{ fontSize: 11, color: "#6B7280", marginTop: 8 }}>or {FREE_TIER.yearlyPrice}/year (save {FREE_TIER.yearlySavings})</div>
+        <div style={{ fontSize: 11, color: "#10B981", fontWeight: 600, marginTop: 8 }}>Free through June 1 \u2014 your card won\u2019t be charged until then.</div>
         <button onClick={onClose} style={{ marginTop: 14, padding: "8px 20px", borderRadius: 6, background: "transparent", border: "1px solid rgba(255,255,255,0.1)", color: "#6B7280", cursor: "pointer", fontSize: 12 }}>Close</button>
       </div>
     </div>
@@ -8893,6 +8895,7 @@ export default function RangeIQ() {
               <div style={{ fontSize:16, fontWeight:700, color:"#E5E7EB", marginBottom:4 }}>Unlock the full engine</div>
               <div style={{ fontSize:12, color:"#9CA3AF", lineHeight:1.5 }}>All 9 opponent types, unlimited postflop, unlimited drills, full vault.</div>
               <div style={{ fontSize:13, color:"#D9B95B", fontWeight:700, marginTop:6 }}>{FREE_TIER.monthlyPrice}/mo or {FREE_TIER.yearlyPrice}/year</div>
+              <div style={{ fontSize:11, color:"#10B981", fontWeight:600, marginTop:4 }}>Free through June 1. Your card won't be charged until then.</div>
             </div>
             <div style={{ padding:"10px 22px", borderRadius:8,
               background:"linear-gradient(135deg, #D9B95B 0%, #c9a440 100%)",
