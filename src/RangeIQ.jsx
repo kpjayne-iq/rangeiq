@@ -8743,7 +8743,7 @@ export default function RangeIQ() {
       {/* Stats row - all gold numbers, grey labels */}
       <div className="riq-home-stats" style={{ display:"flex", gap:48, animation:"fadeUp 0.9s ease", flexWrap:"wrap", justifyContent:"center" }}>
         {[
-          ["8",     "Target Profiles", "Know exactly who you're playing against."],
+          ["9",     "Target Profiles", "Know exactly who you're playing against."],
           ["100",   "Drill Scenarios",  "Preflop to river across all archetypes."],
           ["1,326", "Combos",           "All starting hand combinations covered."],
         ].map(([v,l,sub])=>(
