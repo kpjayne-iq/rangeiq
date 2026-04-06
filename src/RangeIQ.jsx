@@ -1,5 +1,128 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 
+
+// ================================================================
+// FREEMIUM GATING SYSTEM - Phase 2
+// Pure frontend, localStorage-based, no backend required
+// ================================================================
+
+const FREE_TIER = {
+  postflopSpotsPerDay: 2,
+  drillsPerDay: 1,
+  vaultMaxSpots: 3,
+  allowedVillains: ["unknown", "station", "tag", "nit"],
+  resetHour: 0,
+  stripeLink: "https://rangeiqpoker.lemonsqueezy.com/checkout/buy/1bcec413-0aa0-4cd1-9fa9-6aef306bfa42", // Lemon Squeezy checkout link
+  monthlyPrice: "$14.99",
+  yearlyPrice: "$119",
+  yearlySavings: "34%",
+};
+
+function getFreemiumUsage() {
+  try {
+    const raw = localStorage.getItem("rangeiq:freemium_usage");
+    if (raw) {
+      const data = JSON.parse(raw);
+      const today = new Date().toDateString();
+      if (data.lastReset === today) return data;
+      const reset = { postflopCount: 0, drillCount: 0, lastReset: today };
+      localStorage.setItem("rangeiq:freemium_usage", JSON.stringify(reset));
+      return reset;
+    }
+  } catch (e) {}
+  const fresh = { postflopCount: 0, drillCount: 0, lastReset: new Date().toDateString() };
+  localStorage.setItem("rangeiq:freemium_usage", JSON.stringify(fresh));
+  return fresh;
+}
+function incrementPostflopCount() { const u = getFreemiumUsage(); u.postflopCount += 1; localStorage.setItem("rangeiq:freemium_usage", JSON.stringify(u)); return u.postflopCount; }
+function incrementDrillCount() { const u = getFreemiumUsage(); u.drillCount += 1; localStorage.setItem("rangeiq:freemium_usage", JSON.stringify(u)); return u.drillCount; }
+function isPostflopLocked() { return false; /* DISABLED UNTIL JUNE 1 - was: getFreemiumUsage().postflopCount >= FREE_TIER.postflopSpotsPerDay */ }
+function isDrillLocked() { return false; /* DISABLED UNTIL JUNE 1 - was: getFreemiumUsage().drillCount >= FREE_TIER.drillsPerDay */ }
+function isVillainLocked(key) { return false; /* DISABLED UNTIL JUNE 1 - was: !FREE_TIER.allowedVillains.includes(key) */ }
+function isVaultFull(len) { return false; /* DISABLED UNTIL JUNE 1 - was: len >= FREE_TIER.vaultMaxSpots */ }
+function getRemainingPostflop() { return Math.max(0, FREE_TIER.postflopSpotsPerDay - getFreemiumUsage().postflopCount); }
+function getRemainingDrills() { return Math.max(0, FREE_TIER.drillsPerDay - getFreemiumUsage().drillCount); }
+
+function UpgradeCard({ headline, description, featureContext, style }) {
+  return (
+    <div style={{
+      background: "linear-gradient(135deg, rgba(217,185,91,0.08) 0%, rgba(217,185,91,0.02) 100%)",
+      border: "1.5px solid rgba(217,185,91,0.4)",
+      borderRadius: 12, padding: "24px 22px", textAlign: "center", ...style,
+    }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "#D9B95B", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 8 }}>Unlock Full IQ</div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: "#E5E7EB", marginBottom: 8, lineHeight: 1.3 }}>{headline}</div>
+      {description && <div style={{ fontSize: 13, color: "#9CA3AF", marginBottom: 16, lineHeight: 1.6 }}>{description}</div>}
+      {featureContext && <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 14, fontStyle: "italic" }}>{featureContext}</div>}
+      <a href={FREE_TIER.stripeLink} target="_blank" rel="noopener noreferrer" style={{
+        display: "inline-block", padding: "12px 28px", borderRadius: 8,
+        background: "linear-gradient(135deg, #D9B95B 0%, #c9a440 100%)",
+        color: "#111827", fontSize: 14, fontWeight: 700, textDecoration: "none",
+        letterSpacing: "0.04em", boxShadow: "0 4px 16px rgba(217,185,91,0.35)",
+      }}>Unlock Full IQ \u2014 {FREE_TIER.monthlyPrice}/mo</a>
+      <div style={{ fontSize: 11, color: "#6B7280", marginTop: 8 }}>or {FREE_TIER.yearlyPrice}/year (save {FREE_TIER.yearlySavings})</div>
+    </div>
+  );
+}
+
+function ProBadge({ style }) {
+  return (
+    <span style={{
+      padding: "1px 6px", borderRadius: 99, fontSize: 8, fontWeight: 800,
+      background: "rgba(217,185,91,0.2)", border: "1px solid rgba(217,185,91,0.45)",
+      color: "#D9B95B", letterSpacing: "0.08em", textTransform: "uppercase",
+      marginLeft: 4, flexShrink: 0, ...style,
+    }}>PRO</span>
+  );
+}
+
+function PostflopBlurOverlay({ children, isLocked }) {
+  if (!isLocked) return children;
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={{ filter: "blur(8px)", pointerEvents: "none", userSelect: "none" }}>{children}</div>
+      <div style={{
+        position: "absolute", inset: 0,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: "rgba(11,15,20,0.75)", borderRadius: 14,
+      }}>
+        <UpgradeCard
+          headline="Unlock the Rest of the Hand"
+          description={"You\u2019ve used your " + FREE_TIER.postflopSpotsPerDay + " free postflop spots today. The answer is right here \u2014 unlock to continue."}
+          style={{ maxWidth: 380, margin: "0 20px" }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function VillainLockedTooltip({ archetype, onClose }) {
+  const p = ARCHETYPES[archetype];
+  if (!p) return null;
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ background: "#111827", border: "1px solid rgba(217,185,91,0.3)", borderRadius: 16, padding: "28px 24px", maxWidth: 400, width: "100%", textAlign: "center" }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#D9B95B", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 10 }}>Unlock Full IQ</div>
+        <div style={{ width: 56, height: 56, borderRadius: "50%", margin: "0 auto 14px", background: p.color + "22", border: "2px solid " + p.color + "55", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 800, color: p.color }}>{p.label.charAt(0)}</div>
+        <div style={{ fontSize: 20, fontWeight: 700, color: p.color, marginBottom: 6 }}>{p.label}</div>
+        <div style={{ fontSize: 13, color: "#9CA3AF", marginBottom: 16, lineHeight: 1.6 }}>{p.desc}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 20 }}>
+          {[["VPIP", p.vpip + "%"], ["Aggr", p.aggression + "%"], ["Fold", p.foldFlop + "%"]].map(([lbl, val]) => (
+            <div key={lbl} style={{ background: "rgba(255,255,255,0.04)", borderRadius: 6, padding: "6px 4px" }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: p.color }}>{val}</div>
+              <div style={{ fontSize: 8, color: "#6B7280", textTransform: "uppercase" }}>{lbl}</div>
+            </div>
+          ))}
+        </div>
+        <a href={FREE_TIER.stripeLink} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", width: "100%", padding: "13px 0", borderRadius: 8, background: "linear-gradient(135deg, #D9B95B 0%, #c9a440 100%)", color: "#111827", fontSize: 14, fontWeight: 700, textDecoration: "none", boxShadow: "0 4px 16px rgba(217,185,91,0.35)" }}>Unlock Full IQ \u2014 {FREE_TIER.monthlyPrice}/mo</a>
+        <div style={{ fontSize: 11, color: "#6B7280", marginTop: 8 }}>or {FREE_TIER.yearlyPrice}/year (save {FREE_TIER.yearlySavings})</div>
+        <button onClick={onClose} style={{ marginTop: 14, padding: "8px 20px", borderRadius: 6, background: "transparent", border: "1px solid rgba(255,255,255,0.1)", color: "#6B7280", cursor: "pointer", fontSize: 12 }}>Close</button>
+      </div>
+    </div>
+  );
+}
+
+
 // ================================================================
 // DESIGN SYSTEM  -  Component System Spec
 // ================================================================
@@ -4676,14 +4799,23 @@ function RangeBuilderScreen({ onBack, initialGameSize }) {
                 border:"1px solid "+(villainType===null?C.gold:C.border),
                 color:villainType===null?C.gold:C.disabled,
               }}>None</button>
-              {Object.entries(ARCHETYPES).filter(([k])=>k!=="unknown").map(([key,prof])=>(
-                <button key={key} onClick={()=>setVillainType(key)} style={{
-                  padding:"4px 8px", borderRadius:5, fontSize:10, fontWeight:600, cursor:"pointer",
-                  background:villainType===key?prof.color+"22":C.surface,
-                  border:"1px solid "+(villainType===key?prof.color:C.border),
-                  color:villainType===key?prof.color:C.muted,
-                }}>{prof.label}</button>
-              ))}
+              {Object.entries(ARCHETYPES).filter(([k])=>k!=="unknown").map(([key,prof])=>{
+                const locked = isVillainLocked(key);
+                return (
+                <button key={key} onClick={()=>{
+                  if (locked) return;
+                  setVillainType(key);
+                }} style={{
+                  padding:"4px 8px", borderRadius:5, fontSize:10, fontWeight:600,
+                  cursor: locked ? "not-allowed" : "pointer",
+                  background: locked ? "rgba(255,255,255,0.02)" : villainType===key?prof.color+"22":C.surface,
+                  border:"1px solid "+(locked ? "rgba(255,255,255,0.06)" : villainType===key?prof.color:C.border),
+                  color: locked ? "#4B5563" : villainType===key?prof.color:C.muted,
+                  opacity: locked ? 0.4 : 1,
+                  display: "inline-flex", alignItems: "center", gap: 3,
+                }}>{prof.label}{locked && <ProBadge/>}</button>
+                );
+              })}
             </div>
           </Card>
 
@@ -6384,7 +6516,7 @@ const BASE_CSS = `
   @media(max-width:768px) {
     .riq-main-grid { grid-template-columns:1fr !important; }
     .riq-builder-grid { grid-template-columns:1fr !important; }
-    .riq-edit-drawer { width:100% !important; max-width:100% !important; height:100dvh !important; }
+    .riq-edit-drawer { width:100% !important; max-width:100% !important; }
     .riq-home-grid { grid-template-columns:1fr !important; }
     .riq-home-stats { gap:24px !important; }
   }
@@ -7616,6 +7748,12 @@ function PracticeScreen({ onBack, initialGameSize }) {
   }
 
   function startDrill(drill, idx) {
+    // --- FREEMIUM GATE: Drill cap ---
+    if (isDrillLocked()) {
+      setPhase("drill_locked");
+      return;
+    }
+    incrementDrillCount();
     setActiveDrill(drill); setActiveIdx(idx);
     setExplanation(null); setPhase("decision");
   }
@@ -7997,6 +8135,20 @@ function PracticeScreen({ onBack, initialGameSize }) {
           </div>
         )}
 
+        {/* DRILL LOCKED */}
+        {phase==="drill_locked"&&(
+          <div style={{ animation:"fadeUp 0.3s ease", padding:"40px 0" }}>
+            <UpgradeCard
+              headline="Unlock Unlimited Drills"
+              description={"Free accounts get "+FREE_TIER.drillsPerDay+" drill per day. Upgrade for unlimited drills and all 100 scenarios."}
+              featureContext={"Next free drill available tomorrow at midnight"}
+            />
+            <div style={{ textAlign:"center", marginTop:16 }}>
+              <Btn variant="secondary" onClick={onBack} style={{ fontSize:13 }}>Back to Home</Btn>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
@@ -8100,6 +8252,8 @@ export default function RangeIQ() {
   const pendingAnalysis = useRef(false);
   // Feedback system state
   const [showFeedback,setShowFeedback]   = useState(false);
+  const [postflopGateLocked,setPostflopGateLocked] = useState(false);
+  const [lockedVillainTooltip,setLockedVillainTooltip] = useState(null);
   const [showLeakHunter,setShowLeakHunter] = useState(false);
   const [feedbackText,setFeedbackText]   = useState("");
   const [feedbackEmail,setFeedbackEmail] = useState("");
@@ -8243,6 +8397,21 @@ export default function RangeIQ() {
         return;
       }
 
+      // --- FREEMIUM GATE: Postflop counter ---
+      if (street !== "preflop" && board.length >= 3) {
+        if (isPostflopLocked()) {
+          setPostflopGateLocked(true);
+        } else {
+          setPostflopGateLocked(false);
+          const alreadyCounted = decisions && decisions[street] && decisions[street]._postflopCounted;
+          if (!alreadyCounted) {
+            incrementPostflopCount();
+          }
+        }
+      } else {
+        setPostflopGateLocked(false);
+      }
+
       // -- Phase 2: Raw recommendation from archetype engines --------
       const rawResult = street==="preflop"
         ? recommendPreflop({ heroCards, heroPos, bigBlind:gameSize.bb, tableType, preflopSituation, playersLeft, fieldStickiness, archetype, heroIsIP, isMultiway, heroLastToAct, heroHasActedPreflop: !!(decisions && decisions.preflop), vilAction })
@@ -8363,7 +8532,7 @@ export default function RangeIQ() {
 
       setRec(result); setRange(r); setSnapshots(snaps); setCats(catRange(r));
       // Store decision for this street
-      setDecisions(prev => ({ ...prev, [street]: result }));
+      setDecisions(prev => ({ ...prev, [street]: { ...result, _postflopCounted: true } }));
       setSaveState("default"); setLoading(false); setHasRun(true);
       const entry={id:Date.now(),heroCards:[...heroCards],archetype,board:[...board],street,ts:new Date().toLocaleTimeString(),vilAction:[...vilAction],stackBB,potSize,heroPos,villainPos};
       setHistory(prev=>[entry,...prev].slice(0,5));
@@ -8570,6 +8739,11 @@ export default function RangeIQ() {
 
   function saveHand() {
     if (!rec) return;
+    // --- FREEMIUM GATE: Vault limit ---
+    if (isVaultFull(vault.length)) {
+      setToast("vault_full");
+      return;
+    }
     setSaveState("saving");
     setTimeout(()=>{
       // When a CompletedStateCard is showing, rec.action is null.
@@ -8701,6 +8875,32 @@ export default function RangeIQ() {
         onMouseLeave={e=>{ e.currentTarget.style.transform="translateY(0)"; e.currentTarget.style.boxShadow="0 4px 24px rgba(217,185,91,0.35)"; }}>
           Analyze a Hand &#8594;
         </button>
+      </div>
+
+      {/* Upgrade card */}
+      <div style={{ width:"100%", maxWidth:820, marginBottom:20, animation:"fadeUp 0.6s ease" }}>
+        <a href={FREE_TIER.stripeLink} target="_blank" rel="noopener noreferrer" style={{
+          display:"block", padding:"20px 28px", borderRadius:14, textDecoration:"none",
+          background:"linear-gradient(135deg, rgba(217,185,91,0.06) 0%, rgba(217,185,91,0.02) 100%)",
+          border:"1px solid rgba(217,185,91,0.35)",
+          transition:"all 0.2s", cursor:"pointer",
+        }}
+        onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(217,185,91,0.6)";e.currentTarget.style.boxShadow="0 8px 32px rgba(217,185,91,0.15)";}}
+        onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(217,185,91,0.35)";e.currentTarget.style.boxShadow="none";}}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
+            <div>
+              <div style={{ fontSize:10, fontWeight:700, color:"#D9B95B", textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:6 }}>Go Pro</div>
+              <div style={{ fontSize:16, fontWeight:700, color:"#E5E7EB", marginBottom:4 }}>Unlock the full engine</div>
+              <div style={{ fontSize:12, color:"#9CA3AF", lineHeight:1.5 }}>All 9 opponent types, unlimited postflop, unlimited drills, full vault.</div>
+              <div style={{ fontSize:13, color:"#D9B95B", fontWeight:700, marginTop:6 }}>{FREE_TIER.monthlyPrice}/mo or {FREE_TIER.yearlyPrice}/year</div>
+            </div>
+            <div style={{ padding:"10px 22px", borderRadius:8,
+              background:"linear-gradient(135deg, #D9B95B 0%, #c9a440 100%)",
+              color:"#111827", fontSize:13, fontWeight:700, letterSpacing:"0.04em",
+              boxShadow:"0 4px 16px rgba(217,185,91,0.35)", flexShrink:0,
+            }}>Unlock Full IQ &#8594;</div>
+          </div>
+        </a>
       </div>
 
       {/* Feature cards */}
@@ -9003,6 +9203,7 @@ export default function RangeIQ() {
       <style>{BASE_CSS}</style>
 
       {showConfirm&&<ConfirmModal onConfirm={doReset} onCancel={()=>setShowConfirm(false)}/>}
+      {lockedVillainTooltip&&<VillainLockedTooltip archetype={lockedVillainTooltip} onClose={()=>setLockedVillainTooltip(null)}/>}
       {showPlaySpot&&heroCards[0]&&heroCards[1]&&<PlayTheSpotSim heroCards={heroCards} archetype={archetype} heroIsIP={heroIsIP} board={board} potSize={potSize} stackBB={stackBB} bigBlind={gameSize.bb} onClose={()=>setShowPlaySpot(false)} onSaveToVault={saveHand}/>}
       {picker&&(
         <div onClick={e=>{if(e.target===e.currentTarget)setPicker(null);}}
@@ -9031,6 +9232,14 @@ export default function RangeIQ() {
               </Btn>
               {showHistory&&<HistoryDropdown history={history} onSelect={loadHistory} onClose={()=>setShowHistory(false)}/>}
             </div>
+            <a href={FREE_TIER.stripeLink} target="_blank" rel="noopener noreferrer" style={{
+              padding:"6px 16px", borderRadius:8, fontSize:11, fontWeight:700,
+              background:"linear-gradient(135deg, #D9B95B 0%, #c9a440 100%)",
+              border:"none", color:"#111827",
+              textDecoration:"none", letterSpacing:"0.04em", cursor:"pointer",
+              boxShadow:"0 2px 12px rgba(217,185,91,0.3)",
+              transition:"all 0.2s",
+            }}>Unlock Full IQ</a>
             <Btn variant="ghost" onClick={()=>setScreen("vault")} style={{ fontSize:12 }}>
               Vault{vault.length>0?" ("+vault.length+")":""}
             </Btn>
@@ -9083,6 +9292,20 @@ export default function RangeIQ() {
                 <div style={{ fontSize:9,color:C.muted,textTransform:"uppercase",letterSpacing:"0.08em" }}>{lbl}</div>
               </div>
             ))}
+            {/* Postflop spots remaining nudge */}
+            {isInitialized && street !== "preflop" && getRemainingPostflop() <= FREE_TIER.postflopSpotsPerDay && (
+              <div style={{ textAlign:"center", marginLeft:6, padding:"4px 10px", borderRadius:99,
+                background: getRemainingPostflop() === 0 ? "rgba(239,68,68,0.1)" : getRemainingPostflop() === 1 ? "rgba(245,158,11,0.1)" : "rgba(16,185,129,0.08)",
+                border: "1px solid " + (getRemainingPostflop() === 0 ? "rgba(239,68,68,0.25)" : getRemainingPostflop() === 1 ? "rgba(245,158,11,0.25)" : "rgba(16,185,129,0.2)"),
+              }}>
+                <div style={{ fontSize:12, fontWeight:700, color: getRemainingPostflop() === 0 ? "#EF4444" : getRemainingPostflop() === 1 ? "#F59E0B" : "#10B981", lineHeight:1 }}>
+                  {getRemainingPostflop()}/{FREE_TIER.postflopSpotsPerDay}
+                </div>
+                <div style={{ fontSize:8, color:"#6B7280", textTransform:"uppercase", letterSpacing:"0.06em" }}>
+                  {getRemainingPostflop() === 0 ? "Locked" : getRemainingPostflop() === 1 ? "Last Spot" : "Spots"}
+                </div>
+              </div>
+            )}
             {/* River hand display - 5-card combo + classification */}
             {board.length===5&&heroCards[0]&&heroCards[1]&&(()=>{
               const result = evaluateHand(heroCards, board);
@@ -9155,7 +9378,7 @@ export default function RangeIQ() {
         {/* - EDIT SPOT DRAWER - */}
         {drawerOpen&&(
           <div className="riq-edit-drawer" style={{
-            position:"fixed", top:0, left:0, bottom:0, width:320,
+            position:"fixed", top:0, left:0, height:"100vh", width:320,
             background:C.card, borderRight:"1px solid "+C.border,
             zIndex:150, overflow:"hidden", display:"flex", flexDirection:"column",
             boxShadow:"4px 0 24px rgba(0,0,0,0.5)",
@@ -9217,9 +9440,26 @@ export default function RangeIQ() {
                 </div>
                 {/* Archetype pills */}
                 <div style={{ display:"flex", gap:3, flexWrap:"wrap" }}>
-                  {Object.entries(ARCHETYPES).map(([key,prof])=>(
-                    <button key={key} onClick={()=>setArchetype(key)} style={{ padding:"4px 8px", borderRadius:5, fontSize:10, fontWeight:600, cursor:"pointer", background:archetype===key?prof.color+"22":C.surface, border:"1px solid "+(archetype===key?prof.color:C.border), color:archetype===key?prof.color:C.muted }}>{prof.label}</button>
-                  ))}
+                  {Object.entries(ARCHETYPES).map(([key,prof])=>{
+                    const locked = isVillainLocked(key);
+                    return (
+                    <button key={key} onClick={()=>{
+                      if (locked) { setLockedVillainTooltip(key); return; }
+                      setArchetype(key);
+                    }} style={{
+                      padding:"4px 8px", borderRadius:5, fontSize:10, fontWeight:600,
+                      cursor:"pointer",
+                      background: locked ? "rgba(255,255,255,0.02)" : archetype===key?prof.color+"22":C.surface,
+                      border:"1px solid "+(locked ? "rgba(255,255,255,0.06)" : archetype===key?prof.color:C.border),
+                      color: locked ? "#4B5563" : archetype===key?prof.color:C.muted,
+                      opacity: locked ? 0.6 : 1,
+                      display: "inline-flex", alignItems: "center", gap: 3,
+                    }}>
+                      {prof.label}
+                      {locked && <ProBadge/>}
+                    </button>
+                    );
+                  })}
                 </div>
                 {/* Archetype detail - expandable */}
                 <div style={{ marginTop:8, padding:"8px 10px", borderRadius:6, background:"rgba(255,255,255,0.03)", border:"1px solid "+ARCHETYPES[archetype].color+"22" }}>
@@ -9398,7 +9638,7 @@ export default function RangeIQ() {
             </div>
 
             {/* GROUP 4: CTA - sticky at bottom */}
-            <div style={{ padding:"12px 16px", paddingBottom:"calc(12px + env(safe-area-inset-bottom, 0px))", borderTop:"1px solid "+C.border, flexShrink:0, background:C.card }}>
+            <div style={{ padding:"12px 16px", borderTop:"1px solid "+C.border, flexShrink:0 }}>
               <Btn variant="primary" onClick={()=>{ runAnalysis(); setDrawerOpen(false); }} disabled={!heroCards[0]||!heroCards[1]} style={{ width:"100%", padding:"13px", fontSize:14, fontWeight:700, borderRadius:8 }}>
                 {loading?"Analyzing...":"Get Recommendation"}
               </Btn>
@@ -10239,6 +10479,7 @@ export default function RangeIQ() {
                 )}
 
                 {/* DECISION CARD - hidden when state is incomplete */}
+                <PostflopBlurOverlay isLocked={postflopGateLocked && street !== "preflop"}>
                 <div style={{
                   background:C.card, borderRadius:14,
                   border:"1px solid "+recColor+"33",
@@ -10464,7 +10705,11 @@ export default function RangeIQ() {
                           &#9881; Builder
                         </button>
                         <div style={{ position:"relative" }}>
-                        <select value={archetype} onChange={e=>setArchetype(e.target.value)} style={{
+                        <select value={archetype} onChange={e=>{
+                          const val = e.target.value;
+                          if (isVillainLocked(val)) { setLockedVillainTooltip(val); e.target.value = archetype; return; }
+                          setArchetype(val);
+                        }} style={{
                           background:C.surface, border:"1px solid "+C.border,
                           borderRadius:6, padding:"4px 24px 4px 10px",
                           color:ARCHETYPES[archetype]?.color||C.muted,
@@ -10472,7 +10717,9 @@ export default function RangeIQ() {
                           appearance:"none", WebkitAppearance:"none",
                         }}>
                           {Object.entries(ARCHETYPES).map(([key,prof])=>(
-                            <option key={key} value={key}>vs {prof.label}</option>
+                            <option key={key} value={key} disabled={isVillainLocked(key)}>
+                              {isVillainLocked(key) ? "\uD83D\uDD12 " : ""}vs {prof.label}{isVillainLocked(key) ? " (Pro)" : ""}
+                            </option>
                           ))}
                         </select>
                         <span style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", pointerEvents:"none", fontSize:9, color:C.disabled }}>&#9660;</span>
@@ -10925,6 +11172,7 @@ export default function RangeIQ() {
                   </>
                   )}
                 </div>
+                </PostflopBlurOverlay>
                 {/* COMPARE MODE */}
                 {compareMode&&(
                   <div style={{ marginTop:16, animation:"fadeUp 0.3s ease" }}>
@@ -11178,7 +11426,18 @@ export default function RangeIQ() {
         </div>
       )}
 
-      {toast&&<Toast msg={toast} onDone={()=>setToast(null)} onViewVault={()=>{setToast(null);setScreen("vault");}}/>}
+      {toast&&toast!=="vault_full"&&<Toast msg={toast} onDone={()=>setToast(null)} onViewVault={()=>{setToast(null);setScreen("vault");}}/>}
+      {toast==="vault_full"&&(
+        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",padding:16 }}
+          onClick={e=>{if(e.target===e.currentTarget)setToast(null);}}>
+          <UpgradeCard
+            headline="Unlock the Full Vault"
+            description={"Free accounts can save up to "+FREE_TIER.vaultMaxSpots+" spots. Upgrade to save unlimited hands."}
+            featureContext={vault.length+" / "+FREE_TIER.vaultMaxSpots+" spots used"}
+            style={{ maxWidth:400 }}
+          />
+        </div>
+      )}
     </div>
   );
 }
