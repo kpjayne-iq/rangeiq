@@ -12,11 +12,63 @@ const FREE_TIER = {
   vaultMaxSpots: 3,
   allowedVillains: ["unknown", "station", "tag", "nit"],
   resetHour: 0,
-  stripeLink: "https://rangeiqpoker.lemonsqueezy.com/checkout/buy/1bcec413-0aa0-4cd1-9fa9-6aef306bfa42", // Lemon Squeezy checkout link
   monthlyPrice: "$14.99",
   yearlyPrice: "$119",
   yearlySavings: "34%",
 };
+
+// ================================================================
+// PADDLE CHECKOUT INTEGRATION
+// ================================================================
+const PADDLE_CONFIG = {
+  clientToken: "live_64b89b8098b20eb883a9049fd36",
+  monthlyPriceId: "pri_01knm7tyxmchp9e4t8ekfgwtk1",
+  annualPriceId: "pri_01knm7wcc97mtwzv3vpndhfjf1",
+};
+
+// Initialize Paddle.js on first load
+let paddleInitialized = false;
+function initPaddle() {
+  if (paddleInitialized) return;
+  if (typeof window === "undefined" || !window.Paddle) return;
+  try {
+    window.Paddle.Environment.set("production");
+    window.Paddle.Initialize({
+      token: PADDLE_CONFIG.clientToken,
+      eventCallback: function(data) {
+        if (data.name === "checkout.completed") {
+          try { localStorage.setItem("rangeiq:subscribed", "true"); } catch (e) {}
+        }
+      },
+    });
+    paddleInitialized = true;
+  } catch (e) {
+    console.error("Paddle init failed:", e);
+  }
+}
+
+// Open Paddle checkout - defaults to monthly
+function openPaddleCheckout(interval) {
+  if (typeof window === "undefined") return;
+  initPaddle();
+  if (!window.Paddle) {
+    console.error("Paddle.js not loaded");
+    return;
+  }
+  const priceId = interval === "annual" ? PADDLE_CONFIG.annualPriceId : PADDLE_CONFIG.monthlyPriceId;
+  try {
+    window.Paddle.Checkout.open({
+      items: [{ priceId: priceId, quantity: 1 }],
+      settings: {
+        theme: "dark",
+        displayMode: "overlay",
+        variant: "one-page",
+      },
+    });
+  } catch (e) {
+    console.error("Paddle checkout failed:", e);
+  }
+}
 
 function getFreemiumUsage() {
   try {
@@ -54,12 +106,13 @@ function UpgradeCard({ headline, description, featureContext, style }) {
       <div style={{ fontSize: 18, fontWeight: 700, color: "#E5E7EB", marginBottom: 8, lineHeight: 1.3 }}>{headline}</div>
       {description && <div style={{ fontSize: 13, color: "#9CA3AF", marginBottom: 16, lineHeight: 1.6 }}>{description}</div>}
       {featureContext && <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 14, fontStyle: "italic" }}>{featureContext}</div>}
-      <a href={FREE_TIER.stripeLink} target="_blank" rel="noopener noreferrer" style={{
+      <button onClick={()=>openPaddleCheckout("monthly")} style={{
         display: "inline-block", padding: "12px 28px", borderRadius: 8,
         background: "linear-gradient(135deg, #D9B95B 0%, #c9a440 100%)",
         color: "#111827", fontSize: 14, fontWeight: 700, textDecoration: "none",
         letterSpacing: "0.04em", boxShadow: "0 4px 16px rgba(217,185,91,0.35)",
-      }}>Unlock Full IQ \u2014 {FREE_TIER.monthlyPrice}/mo</a>
+        border: "none", cursor: "pointer", fontFamily: "inherit",
+      }}>Unlock Full IQ \u2014 {FREE_TIER.monthlyPrice}/mo</button>
       <div style={{ fontSize: 11, color: "#6B7280", marginTop: 8 }}>or {FREE_TIER.yearlyPrice}/year (save {FREE_TIER.yearlySavings})</div>
       <div style={{ fontSize: 11, color: "#10B981", fontWeight: 600, marginTop: 8 }}>Free through June 1 \u2014 your card won\u2019t be charged until then.</div>
     </div>
@@ -115,7 +168,7 @@ function VillainLockedTooltip({ archetype, onClose }) {
             </div>
           ))}
         </div>
-        <a href={FREE_TIER.stripeLink} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", width: "100%", padding: "13px 0", borderRadius: 8, background: "linear-gradient(135deg, #D9B95B 0%, #c9a440 100%)", color: "#111827", fontSize: 14, fontWeight: 700, textDecoration: "none", boxShadow: "0 4px 16px rgba(217,185,91,0.35)" }}>Unlock Full IQ \u2014 {FREE_TIER.monthlyPrice}/mo</a>
+        <button onClick={()=>openPaddleCheckout("monthly")} style={{ display: "inline-block", width: "100%", padding: "13px 0", borderRadius: 8, background: "linear-gradient(135deg, #D9B95B 0%, #c9a440 100%)", color: "#111827", fontSize: 14, fontWeight: 700, textDecoration: "none", boxShadow: "0 4px 16px rgba(217,185,91,0.35)", border: "none", cursor: "pointer", fontFamily: "inherit" }}>Unlock Full IQ \u2014 {FREE_TIER.monthlyPrice}/mo</button>
         <div style={{ fontSize: 11, color: "#6B7280", marginTop: 8 }}>or {FREE_TIER.yearlyPrice}/year (save {FREE_TIER.yearlySavings})</div>
         <div style={{ fontSize: 11, color: "#10B981", fontWeight: 600, marginTop: 8 }}>Free through June 1 \u2014 your card won\u2019t be charged until then.</div>
         <button onClick={onClose} style={{ marginTop: 14, padding: "8px 20px", borderRadius: 6, background: "transparent", border: "1px solid rgba(255,255,255,0.1)", color: "#6B7280", cursor: "pointer", fontSize: 12 }}>Close</button>
@@ -8881,7 +8934,7 @@ export default function RangeIQ() {
 
       {/* Upgrade card */}
       <div style={{ width:"100%", maxWidth:820, marginBottom:20, animation:"fadeUp 0.6s ease" }}>
-        <a href={FREE_TIER.stripeLink} target="_blank" rel="noopener noreferrer" style={{
+        <div onClick={()=>openPaddleCheckout("monthly")} style={{
           display:"block", padding:"20px 28px", borderRadius:14, textDecoration:"none",
           background:"linear-gradient(135deg, rgba(217,185,91,0.06) 0%, rgba(217,185,91,0.02) 100%)",
           border:"1px solid rgba(217,185,91,0.35)",
@@ -8903,7 +8956,7 @@ export default function RangeIQ() {
               boxShadow:"0 4px 16px rgba(217,185,91,0.35)", flexShrink:0,
             }}>Unlock Full IQ &#8594;</div>
           </div>
-        </a>
+        </div>
       </div>
 
       {/* Feature cards */}
@@ -9249,14 +9302,14 @@ export default function RangeIQ() {
               </Btn>
               {showHistory&&<HistoryDropdown history={history} onSelect={loadHistory} onClose={()=>setShowHistory(false)}/>}
             </div>
-            <a href={FREE_TIER.stripeLink} target="_blank" rel="noopener noreferrer" style={{
+            <button onClick={()=>openPaddleCheckout("monthly")} style={{
               padding:"6px 16px", borderRadius:8, fontSize:11, fontWeight:700,
               background:"linear-gradient(135deg, #D9B95B 0%, #c9a440 100%)",
               border:"none", color:"#111827",
-              textDecoration:"none", letterSpacing:"0.04em", cursor:"pointer",
+              letterSpacing:"0.04em", cursor:"pointer",
               boxShadow:"0 2px 12px rgba(217,185,91,0.3)",
-              transition:"all 0.2s",
-            }}>Unlock Full IQ</a>
+              transition:"all 0.2s", fontFamily:"inherit",
+            }}>Unlock Full IQ</button>
             <Btn variant="ghost" onClick={()=>setScreen("vault")} style={{ fontSize:12 }}>
               Vault{vault.length>0?" ("+vault.length+")":""}
             </Btn>
