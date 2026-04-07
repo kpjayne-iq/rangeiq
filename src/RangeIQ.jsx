@@ -8957,6 +8957,20 @@ export default function RangeIQ() {
           </div>
         ))}
       </div>
+
+      {/* FOOTER - legal links */}
+      <div style={{ width:"100%", maxWidth:1100, marginTop:60, paddingTop:32, borderTop:"1px solid rgba(255,255,255,0.06)", textAlign:"center" }}>
+        <div style={{ fontSize:13, color:"#6F7D8A", marginBottom:12 }}>
+          RangeIQ Poker &middot; A Between the Cards product &middot; &copy; 2026 IQ Digital Holdings
+        </div>
+        <div style={{ display:"flex", gap:24, justifyContent:"center", flexWrap:"wrap" }}>
+          <a href="https://www.rangeiqpoker.com/pricing.html" target="_blank" rel="noopener noreferrer" style={{ fontSize:13, color:"#9CA3AF", textDecoration:"none" }}>Pricing</a>
+          <a href="https://www.rangeiqpoker.com/terms.html" target="_blank" rel="noopener noreferrer" style={{ fontSize:13, color:"#9CA3AF", textDecoration:"none" }}>Terms</a>
+          <a href="https://www.rangeiqpoker.com/privacy.html" target="_blank" rel="noopener noreferrer" style={{ fontSize:13, color:"#9CA3AF", textDecoration:"none" }}>Privacy</a>
+          <a href="mailto:support@rangeiqpoker.com" style={{ fontSize:13, color:"#9CA3AF", textDecoration:"none" }}>Contact</a>
+        </div>
+      </div>
+
     </div>
   );
   if (screen==="practice") return <PracticeScreen onBack={()=>setScreen("home")} initialGameSize={gameSize}/>;
