@@ -57,14 +57,20 @@ function openPaddleCheckout(interval) {
   }
   const priceId = interval === "annual" ? PADDLE_CONFIG.annualPriceId : PADDLE_CONFIG.monthlyPriceId;
   try {
-    window.Paddle.Checkout.open({
+    // Grab Tolt referral ID if present (affiliate tracking)
+    const toltReferral = (typeof window !== "undefined" && window.tolt_referral) ? window.tolt_referral : null;
+    const checkoutOptions = {
       items: [{ priceId: priceId, quantity: 1 }],
       settings: {
         theme: "dark",
         displayMode: "overlay",
         variant: "one-page",
       },
-    });
+    };
+    if (toltReferral) {
+      checkoutOptions.customData = { tolt_referral: toltReferral };
+    }
+    window.Paddle.Checkout.open(checkoutOptions);
   } catch (e) {
     console.error("Paddle checkout failed:", e);
   }
