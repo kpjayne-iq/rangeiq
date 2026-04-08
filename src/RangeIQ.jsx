@@ -1,4 +1,46 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+// ================================================================
+// SUPABASE CLIENT - Phase 3 Auth + Subscription State
+// ================================================================
+const SUPABASE_URL = "https://ergcjqowgdxpneohlvam.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_oIesp1ETUk71GqPY0jZ8pw_cTNChhHL";
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+});
+
+// Helper: fetch user profile (subscription status) from Supabase
+async function fetchUserProfile(userId) {
+  if (!userId) return null;
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .single();
+    if (error) {
+      console.error("Profile fetch error:", error);
+      return null;
+    }
+    return data;
+  } catch (e) {
+    console.error("Profile fetch exception:", e);
+    return null;
+  }
+}
+
+// Helper: check if user has active Pro subscription
+function hasActiveSubscription(profile) {
+  if (!profile) return false;
+  return profile.subscription_status === "active" || profile.subscription_status === "trialing";
+}
+
 
 
 // ================================================================
@@ -48,7 +90,8 @@ function initPaddle() {
 }
 
 // Open Paddle checkout - defaults to monthly
-function openPaddleCheckout(interval) {
+// authUser and authProfile are optional - if provided, links checkout to Supabase user
+function openPaddleCheckout(interval, authUser, authProfile) {
   if (typeof window === "undefined") return;
   initPaddle();
   if (!window.Paddle) {
@@ -59,6 +102,11 @@ function openPaddleCheckout(interval) {
   try {
     // Grab Tolt referral ID if present (affiliate tracking)
     const toltReferral = (typeof window !== "undefined" && window.tolt_referral) ? window.tolt_referral : null;
+    
+    const customData = {};
+    if (toltReferral) customData.tolt_referral = toltReferral;
+    if (authUser && authUser.id) customData.supabase_user_id = authUser.id;
+    
     const checkoutOptions = {
       items: [{ priceId: priceId, quantity: 1 }],
       settings: {
@@ -67,9 +115,16 @@ function openPaddleCheckout(interval) {
         variant: "one-page",
       },
     };
-    if (toltReferral) {
-      checkoutOptions.customData = { tolt_referral: toltReferral };
+    
+    // Pre-fill customer email if user is logged in
+    if (authUser && authUser.email) {
+      checkoutOptions.customer = { email: authUser.email };
     }
+    
+    if (Object.keys(customData).length > 0) {
+      checkoutOptions.customData = customData;
+    }
+    
     window.Paddle.Checkout.open(checkoutOptions);
   } catch (e) {
     console.error("Paddle checkout failed:", e);
@@ -8217,6 +8272,129 @@ function PracticeScreen({ onBack, initialGameSize }) {
 
 
 // ================================================================
+// AUTH MODAL - Sign In / Sign Up
+// ================================================================
+function AuthModal({ isOpen, onClose, onSuccess }) {
+  const [mode, setMode] = useState("signin"); // "signin" or "signup"
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [successMsg, setSuccessMsg] = useState(null);
+
+  if (!isOpen) return null;
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError(null);
+    setSuccessMsg(null);
+    setLoading(true);
+    try {
+      if (mode === "signup") {
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        if (data.user) {
+          setSuccessMsg("Account created! You're now signed in.");
+          setTimeout(() => { onSuccess && onSuccess(data.user); onClose(); }, 800);
+        }
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        if (data.user) {
+          setSuccessMsg("Signed in successfully.");
+          setTimeout(() => { onSuccess && onSuccess(data.user); onClose(); }, 400);
+        }
+      }
+    } catch (err) {
+      setError(err.message || "Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1000,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+    }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{
+        background: "#111827", border: "1px solid rgba(217,185,91,0.3)", borderRadius: 16,
+        padding: "32px 28px", maxWidth: 400, width: "100%",
+      }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#D9B95B", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 8 }}>
+          {mode === "signup" ? "Create Account" : "Sign In"}
+        </div>
+        <div style={{ fontSize: 22, fontWeight: 700, color: "#E5E7EB", marginBottom: 20 }}>
+          {mode === "signup" ? "Join RangeIQ" : "Welcome back"}
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: "block", fontSize: 11, color: "#9CA3AF", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 }}>Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+              autoFocus
+              style={{
+                width: "100%", padding: "12px 14px", borderRadius: 8,
+                background: "#0B0F14", border: "1px solid rgba(255,255,255,0.1)",
+                color: "#E5E7EB", fontSize: 14, fontFamily: "inherit", outline: "none",
+              }}
+            />
+          </div>
+          <div style={{ marginBottom: 18 }}>
+            <label style={{ display: "block", fontSize: 11, color: "#9CA3AF", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 }}>Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+              minLength={8}
+              style={{
+                width: "100%", padding: "12px 14px", borderRadius: 8,
+                background: "#0B0F14", border: "1px solid rgba(255,255,255,0.1)",
+                color: "#E5E7EB", fontSize: 14, fontFamily: "inherit", outline: "none",
+              }}
+            />
+            {mode === "signup" && <div style={{ fontSize: 11, color: "#6B7280", marginTop: 6 }}>Minimum 8 characters</div>}
+          </div>
+
+          {error && <div style={{ padding: "10px 12px", marginBottom: 14, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, color: "#EF4444", fontSize: 13 }}>{error}</div>}
+          {successMsg && <div style={{ padding: "10px 12px", marginBottom: 14, background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.3)", borderRadius: 8, color: "#10B981", fontSize: 13 }}>{successMsg}</div>}
+
+          <button type="submit" disabled={loading} style={{
+            width: "100%", padding: "13px 0", borderRadius: 8,
+            background: loading ? "rgba(217,185,91,0.5)" : "linear-gradient(135deg, #D9B95B 0%, #c9a440 100%)",
+            color: "#111827", fontSize: 14, fontWeight: 700, border: "none",
+            cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit",
+            boxShadow: "0 4px 16px rgba(217,185,91,0.25)",
+          }}>
+            {loading ? "Please wait..." : (mode === "signup" ? "Create Account" : "Sign In")}
+          </button>
+        </form>
+
+        <div style={{ marginTop: 18, textAlign: "center", fontSize: 13, color: "#9CA3AF" }}>
+          {mode === "signup" ? (
+            <>Already have an account? <button onClick={() => { setMode("signin"); setError(null); }} style={{ background: "none", border: "none", color: "#D9B95B", cursor: "pointer", fontWeight: 600, fontSize: 13, fontFamily: "inherit" }}>Sign in</button></>
+          ) : (
+            <>Don\u2019t have an account? <button onClick={() => { setMode("signup"); setError(null); }} style={{ background: "none", border: "none", color: "#D9B95B", cursor: "pointer", fontWeight: 600, fontSize: 13, fontFamily: "inherit" }}>Create one</button></>
+          )}
+        </div>
+
+        <button onClick={onClose} style={{
+          marginTop: 16, width: "100%", padding: "8px 0", background: "transparent",
+          border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6,
+          color: "#6B7280", cursor: "pointer", fontSize: 12, fontFamily: "inherit",
+        }}>Close</button>
+      </div>
+    </div>
+  );
+}
+
+
+// ================================================================
 // MAIN APP
 // ================================================================
 export default function RangeIQ() {
@@ -8315,6 +8493,51 @@ export default function RangeIQ() {
   const [showFeedback,setShowFeedback]   = useState(false);
   const [postflopGateLocked,setPostflopGateLocked] = useState(false);
   const [lockedVillainTooltip,setLockedVillainTooltip] = useState(null);
+  
+  // --- Phase 3: Supabase Auth State ---
+  const [authUser, setAuthUser] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  
+  // Initialize auth on mount + subscribe to auth changes
+  useEffect(() => {
+    // Check existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setAuthUser(session.user);
+        fetchUserProfile(session.user.id).then(profile => {
+          setUserProfile(profile);
+          setAuthLoading(false);
+        });
+      } else {
+        setAuthLoading(false);
+      }
+    });
+    
+    // Subscribe to auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setAuthUser(session.user);
+        fetchUserProfile(session.user.id).then(profile => setUserProfile(profile));
+      } else {
+        setAuthUser(null);
+        setUserProfile(null);
+      }
+    });
+    
+    return () => subscription?.unsubscribe();
+  }, []);
+  
+  // Handle sign out
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    setShowUserMenu(false);
+  }
+  
+  // Is current user Pro?
+  const isPro = hasActiveSubscription(userProfile);
   const [showLeakHunter,setShowLeakHunter] = useState(false);
   const [feedbackText,setFeedbackText]   = useState("");
   const [feedbackEmail,setFeedbackEmail] = useState("");
@@ -8940,7 +9163,10 @@ export default function RangeIQ() {
 
       {/* Upgrade card */}
       <div style={{ width:"100%", maxWidth:820, marginBottom:20, animation:"fadeUp 0.6s ease" }}>
-        <div onClick={()=>openPaddleCheckout("monthly")} style={{
+        <div onClick={()=>{
+          if (!authUser) { setShowAuthModal(true); return; }
+          openPaddleCheckout("monthly", authUser, userProfile);
+        }} style={{
           display:"block", padding:"20px 28px", borderRadius:14, textDecoration:"none",
           background:"linear-gradient(135deg, rgba(217,185,91,0.06) 0%, rgba(217,185,91,0.02) 100%)",
           border:"1px solid rgba(217,185,91,0.35)",
@@ -9281,6 +9507,7 @@ export default function RangeIQ() {
 
       {showConfirm&&<ConfirmModal onConfirm={doReset} onCancel={()=>setShowConfirm(false)}/>}
       {lockedVillainTooltip&&<VillainLockedTooltip archetype={lockedVillainTooltip} onClose={()=>setLockedVillainTooltip(null)}/>}
+      <AuthModal isOpen={showAuthModal} onClose={()=>setShowAuthModal(false)} onSuccess={(user)=>setAuthUser(user)}/>
       {showPlaySpot&&heroCards[0]&&heroCards[1]&&<PlayTheSpotSim heroCards={heroCards} archetype={archetype} heroIsIP={heroIsIP} board={board} potSize={potSize} stackBB={stackBB} bigBlind={gameSize.bb} onClose={()=>setShowPlaySpot(false)} onSaveToVault={saveHand}/>}
       {picker&&(
         <div onClick={e=>{if(e.target===e.currentTarget)setPicker(null);}}
@@ -9309,14 +9536,68 @@ export default function RangeIQ() {
               </Btn>
               {showHistory&&<HistoryDropdown history={history} onSelect={loadHistory} onClose={()=>setShowHistory(false)}/>}
             </div>
-            <button onClick={()=>openPaddleCheckout("monthly")} style={{
-              padding:"6px 16px", borderRadius:8, fontSize:11, fontWeight:700,
-              background:"linear-gradient(135deg, #D9B95B 0%, #c9a440 100%)",
-              border:"none", color:"#111827",
-              letterSpacing:"0.04em", cursor:"pointer",
-              boxShadow:"0 2px 12px rgba(217,185,91,0.3)",
-              transition:"all 0.2s", fontFamily:"inherit",
-            }}>Unlock Full IQ</button>
+            {!isPro && (
+              <button onClick={()=>{
+                if (!authUser) { setShowAuthModal(true); return; }
+                openPaddleCheckout("monthly", authUser, userProfile);
+              }} style={{
+                padding:"6px 16px", borderRadius:8, fontSize:11, fontWeight:700,
+                background:"linear-gradient(135deg, #D9B95B 0%, #c9a440 100%)",
+                border:"none", color:"#111827",
+                letterSpacing:"0.04em", cursor:"pointer",
+                boxShadow:"0 2px 12px rgba(217,185,91,0.3)",
+                transition:"all 0.2s", fontFamily:"inherit",
+              }}>Unlock Full IQ</button>
+            )}
+            {isPro && (
+              <div style={{
+                padding:"6px 12px", borderRadius:8, fontSize:11, fontWeight:700,
+                background:"rgba(16,185,129,0.15)", border:"1px solid rgba(16,185,129,0.35)",
+                color:"#10B981", letterSpacing:"0.04em",
+                display:"inline-flex", alignItems:"center", gap:4,
+              }}>&#9733; PRO</div>
+            )}
+            {!authUser && !authLoading && (
+              <button onClick={()=>setShowAuthModal(true)} style={{
+                padding:"6px 12px", borderRadius:8, fontSize:11, fontWeight:600,
+                background:"transparent", border:"1px solid rgba(255,255,255,0.15)",
+                color:"#9CA3AF", cursor:"pointer", fontFamily:"inherit",
+                transition:"all 0.2s",
+              }}>Sign In</button>
+            )}
+            {authUser && (
+              <div style={{ position:"relative" }}>
+                <button onClick={()=>setShowUserMenu(!showUserMenu)} style={{
+                  padding:"6px 12px", borderRadius:8, fontSize:11, fontWeight:600,
+                  background:"transparent", border:"1px solid rgba(255,255,255,0.15)",
+                  color:"#E5E7EB", cursor:"pointer", fontFamily:"inherit",
+                  display:"inline-flex", alignItems:"center", gap:6,
+                }}>
+                  <span style={{ width:18, height:18, borderRadius:"50%", background:"#D9B95B", color:"#111827", fontSize:10, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center" }}>
+                    {(authUser.email||"?").charAt(0).toUpperCase()}
+                  </span>
+                  Account
+                </button>
+                {showUserMenu && (
+                  <div style={{
+                    position:"absolute", top:"calc(100% + 6px)", right:0, minWidth:220,
+                    background:"#111827", border:"1px solid rgba(255,255,255,0.1)",
+                    borderRadius:10, padding:12, zIndex:200,
+                    boxShadow:"0 12px 40px rgba(0,0,0,0.5)",
+                  }}>
+                    <div style={{ fontSize:10, color:"#6B7280", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:4 }}>Signed in as</div>
+                    <div style={{ fontSize:13, color:"#E5E7EB", marginBottom:12, wordBreak:"break-all" }}>{authUser.email}</div>
+                    <div style={{ fontSize:10, color:"#6B7280", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:4 }}>Plan</div>
+                    <div style={{ fontSize:13, color: isPro?"#10B981":"#9CA3AF", fontWeight:600, marginBottom:12 }}>{isPro?"Pro":"Free"}</div>
+                    <button onClick={handleSignOut} style={{
+                      width:"100%", padding:"8px 0", background:"transparent",
+                      border:"1px solid rgba(255,255,255,0.1)", borderRadius:6,
+                      color:"#9CA3AF", cursor:"pointer", fontSize:12, fontFamily:"inherit",
+                    }}>Sign out</button>
+                  </div>
+                )}
+              </div>
+            )}
             <Btn variant="ghost" onClick={()=>setScreen("vault")} style={{ fontSize:12 }}>
               Vault{vault.length>0?" ("+vault.length+")":""}
             </Btn>
