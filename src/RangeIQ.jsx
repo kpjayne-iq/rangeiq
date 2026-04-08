@@ -9027,6 +9027,7 @@ export default function RangeIQ() {
           <a href="https://www.rangeiqpoker.com/terms.html" target="_blank" rel="noopener noreferrer" style={{ fontSize:13, color:"#9CA3AF", textDecoration:"none" }}>Terms</a>
           <a href="https://www.rangeiqpoker.com/privacy.html" target="_blank" rel="noopener noreferrer" style={{ fontSize:13, color:"#9CA3AF", textDecoration:"none" }}>Privacy</a>
           <a href="mailto:support@rangeiqpoker.com" style={{ fontSize:13, color:"#9CA3AF", textDecoration:"none" }}>Contact</a>
+          <a href="mailto:partners@rangeiqpoker.com" style={{ fontSize:13, color:"#9CA3AF", textDecoration:"none" }}>Partners</a>
         </div>
       </div>
 
