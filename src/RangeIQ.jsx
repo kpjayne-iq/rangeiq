@@ -9180,7 +9180,7 @@ export default function RangeIQ() {
       <style>{BASE_CSS}</style>
 
       {/* Floating top-right account bar */}
-      <div style={{ position:"absolute", top:20, right:24, display:"flex", alignItems:"center", gap:10, zIndex:50 }}>
+      <div style={{ position:"fixed", top:20, right:24, display:"flex", alignItems:"center", gap:10, zIndex:300 }}>
         {isPro && (
           <div style={{
             padding:"6px 12px", borderRadius:8, fontSize:11, fontWeight:700,
