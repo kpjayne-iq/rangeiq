@@ -9235,6 +9235,9 @@ export default function RangeIQ() {
         )}
       </div>
 
+      {/* Auth modal - must render on home screen too (separate from main return) */}
+      <AuthModal isOpen={showAuthModal} onClose={()=>setShowAuthModal(false)} onSuccess={(user)=>setAuthUser(user)}/>
+
       {/* Logo + tagline */}
       <div style={{ textAlign:"center", marginBottom:40, animation:"fadeUp 0.5s ease" }}>
         <div style={{ display:"flex", justifyContent:"center", marginBottom:14 }}>
