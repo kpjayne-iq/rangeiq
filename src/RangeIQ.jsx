@@ -8542,6 +8542,12 @@ export default function RangeIQ() {
     return () => subscription?.unsubscribe();
   }, []);
   
+  // Close auth modal whenever screen changes (safety net)
+  useEffect(() => {
+    setShowAuthModal(false);
+    setShowUserMenu(false);
+  }, [screen]);
+  
   // Handle sign out
   async function handleSignOut() {
     await supabase.auth.signOut();
@@ -9175,10 +9181,7 @@ export default function RangeIQ() {
 
       {/* Upgrade card */}
       <div style={{ width:"100%", maxWidth:820, marginBottom:20, animation:"fadeUp 0.6s ease" }}>
-        <div onClick={()=>{
-          if (!authUser) { setPendingCheckout("monthly"); setShowAuthModal(true); return; }
-          openPaddleCheckout("monthly", authUser, userProfile);
-        }} style={{
+        <div onClick={()=>openPaddleCheckout("monthly", authUser, userProfile)} style={{
           display:"block", padding:"20px 28px", borderRadius:14, textDecoration:"none",
           background:"linear-gradient(135deg, rgba(217,185,91,0.06) 0%, rgba(217,185,91,0.02) 100%)",
           border:"1px solid rgba(217,185,91,0.35)",
@@ -9549,10 +9552,7 @@ export default function RangeIQ() {
               {showHistory&&<HistoryDropdown history={history} onSelect={loadHistory} onClose={()=>setShowHistory(false)}/>}
             </div>
             {!isPro && (
-              <button onClick={()=>{
-                if (!authUser) { setPendingCheckout("monthly"); setShowAuthModal(true); return; }
-                openPaddleCheckout("monthly", authUser, userProfile);
-              }} style={{
+              <button onClick={()=>openPaddleCheckout("monthly", authUser, userProfile)} style={{
                 padding:"6px 16px", borderRadius:8, fontSize:11, fontWeight:700,
                 background:"linear-gradient(135deg, #D9B95B 0%, #c9a440 100%)",
                 border:"none", color:"#111827",
