@@ -9137,7 +9137,13 @@ export default function RangeIQ() {
   React.useEffect(() => {
     if (screen !== "home") return;
     function handleKey(e) {
+      // Ignore shortcuts when any modal is open (auth, user menu, history, feedback, etc.)
+      if (showAuthModal || showUserMenu || showHistory || showFeedback || showConfirm) return;
+      // Ignore shortcuts when typing in any input/textarea/contenteditable
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      if (e.target.isContentEditable) return;
+      // Ignore if any modifier key is held (Cmd/Ctrl/Alt) so we don't hijack browser shortcuts
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const k = e.key.toLowerCase();
       if (k === "a") setScreen("analyze");
       else if (k === "d") setScreen("practice");
@@ -9145,7 +9151,7 @@ export default function RangeIQ() {
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [screen]);
+  }, [screen, showAuthModal, showUserMenu, showHistory, showFeedback, showConfirm]);
 
   // -- HOME ----------------------------------------------------
   if (screen==="home") return (
