@@ -9150,7 +9150,7 @@ export default function RangeIQ() {
       <style>{BASE_CSS}</style>
 
       {/* Logo + tagline */}
-      <div style={{ textAlign:"center", marginBottom:20, animation:"fadeUp 0.5s ease" }}>
+      <div style={{ textAlign:"center", marginBottom:40, animation:"fadeUp 0.5s ease" }}>
         <div style={{ display:"flex", justifyContent:"center", marginBottom:14 }}>
           <RangeIQLogo size={42}/>
         </div>
@@ -9160,12 +9160,12 @@ export default function RangeIQ() {
         <p style={{ margin:"0 0 28px", fontSize:12, color:C.muted, letterSpacing:"0.1em", textTransform:"uppercase" }}>
           Turn player tendencies into a real edge.
         </p>
-        <button onClick={()=>{ setScreen("analyze"); setDrawerOpen(true); }} style={{
+        <button onClick={(e)=>{ e.stopPropagation(); setScreen("analyze"); setDrawerOpen(true); }} style={{
           height:52, padding:"0 52px", borderRadius:10, fontSize:15, fontWeight:700,
           background:"linear-gradient(135deg, #D9B95B 0%, #c9a440 100%)",
           border:"none", color:"#111827", cursor:"pointer", letterSpacing:"0.06em",
           textTransform:"uppercase", boxShadow:"0 4px 24px rgba(217,185,91,0.35)",
-          transition:"all 0.2s",
+          transition:"all 0.2s", position:"relative", zIndex:2,
         }}
         onMouseEnter={e=>{ e.currentTarget.style.transform="translateY(-2px)"; e.currentTarget.style.boxShadow="0 8px 32px rgba(217,185,91,0.5)"; }}
         onMouseLeave={e=>{ e.currentTarget.style.transform="translateY(0)"; e.currentTarget.style.boxShadow="0 4px 24px rgba(217,185,91,0.35)"; }}>
