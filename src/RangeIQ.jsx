@@ -8547,6 +8547,24 @@ export default function RangeIQ() {
     setShowAuthModal(false);
     setShowUserMenu(false);
   }, [screen]);
+
+  // Auto-open auth modal if ?signin=1 in URL (from homepage Sign In link)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("signin") === "1") {
+        setShowAuthModal(true);
+        // Strip the param so it doesn't reopen on every navigation
+        params.delete("signin");
+        const newQs = params.toString();
+        const newUrl = window.location.pathname + (newQs ? "?" + newQs : "") + window.location.hash;
+        window.history.replaceState({}, "", newUrl);
+      }
+    } catch (e) {
+      // URLSearchParams unavailable or other error - safe to ignore
+    }
+  }, []);
   
   // Handle sign out
   async function handleSignOut() {
@@ -9160,6 +9178,62 @@ export default function RangeIQ() {
       padding:"48px 24px",
       backgroundImage:"radial-gradient(ellipse 90% 60% at 50% -5%, #1c1040 0%, "+C.bg+" 60%)" }}>
       <style>{BASE_CSS}</style>
+
+      {/* Floating top-right account bar */}
+      <div style={{ position:"absolute", top:20, right:24, display:"flex", alignItems:"center", gap:10, zIndex:50 }}>
+        {isPro && (
+          <div style={{
+            padding:"6px 12px", borderRadius:8, fontSize:11, fontWeight:700,
+            background:"rgba(16,185,129,0.15)", border:"1px solid rgba(16,185,129,0.35)",
+            color:"#10B981", letterSpacing:"0.04em",
+            display:"inline-flex", alignItems:"center", gap:4,
+          }}>&#9733; PRO</div>
+        )}
+        {!authUser && !authLoading && (
+          <button onClick={()=>setShowAuthModal(true)} style={{
+            padding:"7px 16px", borderRadius:8, fontSize:12, fontWeight:600,
+            background:"transparent", border:"1px solid rgba(255,255,255,0.2)",
+            color:"#E5E7EB", cursor:"pointer", fontFamily:"inherit",
+            transition:"all 0.2s",
+          }}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(217,185,91,0.6)";e.currentTarget.style.color="#D9B95B";}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(255,255,255,0.2)";e.currentTarget.style.color="#E5E7EB";}}
+          >Sign In</button>
+        )}
+        {authUser && (
+          <div style={{ position:"relative" }}>
+            <button onClick={()=>setShowUserMenu(!showUserMenu)} style={{
+              padding:"6px 14px", borderRadius:8, fontSize:12, fontWeight:600,
+              background:"transparent", border:"1px solid rgba(255,255,255,0.2)",
+              color:"#E5E7EB", cursor:"pointer", fontFamily:"inherit",
+              display:"inline-flex", alignItems:"center", gap:8,
+            }}>
+              <span style={{ width:20, height:20, borderRadius:"50%", background:"#D9B95B", color:"#111827", fontSize:11, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center" }}>
+                {(authUser.email||"?").charAt(0).toUpperCase()}
+              </span>
+              Account
+            </button>
+            {showUserMenu && (
+              <div style={{
+                position:"absolute", top:"calc(100% + 6px)", right:0, minWidth:240,
+                background:"#111827", border:"1px solid rgba(255,255,255,0.1)",
+                borderRadius:10, padding:14, zIndex:200,
+                boxShadow:"0 12px 40px rgba(0,0,0,0.5)",
+              }}>
+                <div style={{ fontSize:10, color:"#6B7280", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:4 }}>Signed in as</div>
+                <div style={{ fontSize:13, color:"#E5E7EB", marginBottom:12, wordBreak:"break-all" }}>{authUser.email}</div>
+                <div style={{ fontSize:10, color:"#6B7280", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:4 }}>Plan</div>
+                <div style={{ fontSize:13, color: isPro?"#10B981":"#9CA3AF", fontWeight:600, marginBottom:12 }}>{isPro?"Pro":"Free"}</div>
+                <button onClick={handleSignOut} style={{
+                  width:"100%", padding:"8px 0", background:"transparent",
+                  border:"1px solid rgba(255,255,255,0.1)", borderRadius:6,
+                  color:"#9CA3AF", cursor:"pointer", fontSize:12, fontFamily:"inherit",
+                }}>Sign out</button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Logo + tagline */}
       <div style={{ textAlign:"center", marginBottom:40, animation:"fadeUp 0.5s ease" }}>
