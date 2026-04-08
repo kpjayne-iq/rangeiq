@@ -8275,7 +8275,7 @@ function PracticeScreen({ onBack, initialGameSize }) {
 // AUTH MODAL - Sign In / Sign Up
 // ================================================================
 function AuthModal({ isOpen, onClose, onSuccess }) {
-  const [mode, setMode] = useState("signin"); // "signin" or "signup"
+  const [mode, setMode] = useState("signup"); // "signin" or "signup" - default to signup since most users are new
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -8324,8 +8324,11 @@ function AuthModal({ isOpen, onClose, onSuccess }) {
         <div style={{ fontSize: 11, fontWeight: 700, color: "#D9B95B", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 8 }}>
           {mode === "signup" ? "Create Account" : "Sign In"}
         </div>
-        <div style={{ fontSize: 22, fontWeight: 700, color: "#E5E7EB", marginBottom: 20 }}>
-          {mode === "signup" ? "Join RangeIQ" : "Welcome back"}
+        <div style={{ fontSize: 22, fontWeight: 700, color: "#E5E7EB", marginBottom: 8 }}>
+          {mode === "signup" ? "Create your account" : "Welcome back"}
+        </div>
+        <div style={{ fontSize: 13, color: "#9CA3AF", marginBottom: 20 }}>
+          {mode === "signup" ? "Quick sign-up \u2014 no email verification required." : "Enter your credentials to continue."}
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -8379,7 +8382,7 @@ function AuthModal({ isOpen, onClose, onSuccess }) {
           {mode === "signup" ? (
             <>Already have an account? <button onClick={() => { setMode("signin"); setError(null); }} style={{ background: "none", border: "none", color: "#D9B95B", cursor: "pointer", fontWeight: 600, fontSize: 13, fontFamily: "inherit" }}>Sign in</button></>
           ) : (
-            <>Don\u2019t have an account? <button onClick={() => { setMode("signup"); setError(null); }} style={{ background: "none", border: "none", color: "#D9B95B", cursor: "pointer", fontWeight: 600, fontSize: 13, fontFamily: "inherit" }}>Create one</button></>
+            <>{"Don\u2019t have an account? "}<button onClick={() => { setMode("signup"); setError(null); }} style={{ background: "none", border: "none", color: "#D9B95B", cursor: "pointer", fontWeight: 600, fontSize: 13, fontFamily: "inherit" }}>Create one</button></>
           )}
         </div>
 
@@ -8500,6 +8503,7 @@ export default function RangeIQ() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [pendingCheckout, setPendingCheckout] = useState(null); // "monthly" | "annual" | null
   
   // Initialize auth on mount + subscribe to auth changes
   useEffect(() => {
@@ -8520,7 +8524,15 @@ export default function RangeIQ() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         setAuthUser(session.user);
-        fetchUserProfile(session.user.id).then(profile => setUserProfile(profile));
+        fetchUserProfile(session.user.id).then(profile => {
+          setUserProfile(profile);
+          // If user was trying to upgrade before signing in, continue the checkout now
+          if (pendingCheckout) {
+            const interval = pendingCheckout;
+            setPendingCheckout(null);
+            setTimeout(() => openPaddleCheckout(interval, session.user, profile), 300);
+          }
+        });
       } else {
         setAuthUser(null);
         setUserProfile(null);
@@ -9164,7 +9176,7 @@ export default function RangeIQ() {
       {/* Upgrade card */}
       <div style={{ width:"100%", maxWidth:820, marginBottom:20, animation:"fadeUp 0.6s ease" }}>
         <div onClick={()=>{
-          if (!authUser) { setShowAuthModal(true); return; }
+          if (!authUser) { setPendingCheckout("monthly"); setShowAuthModal(true); return; }
           openPaddleCheckout("monthly", authUser, userProfile);
         }} style={{
           display:"block", padding:"20px 28px", borderRadius:14, textDecoration:"none",
@@ -9538,7 +9550,7 @@ export default function RangeIQ() {
             </div>
             {!isPro && (
               <button onClick={()=>{
-                if (!authUser) { setShowAuthModal(true); return; }
+                if (!authUser) { setPendingCheckout("monthly"); setShowAuthModal(true); return; }
                 openPaddleCheckout("monthly", authUser, userProfile);
               }} style={{
                 padding:"6px 16px", borderRadius:8, fontSize:11, fontWeight:700,
