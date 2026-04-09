@@ -36,9 +36,54 @@ async function fetchUserProfile(userId) {
 }
 
 // Helper: check if user has active Pro subscription
+// Accepts all valid Pro states: "pro" (written by Paddle webhook), "active", "trialing"
 function hasActiveSubscription(profile) {
   if (!profile) return false;
-  return profile.subscription_status === "active" || profile.subscription_status === "trialing";
+  const status = profile.subscription_status;
+  return status === "pro" || status === "active" || status === "trialing";
+}
+
+// Module-level ref to the component's refetch function
+// Set by the component on mount, called by Paddle checkout.completed callback
+const refetchProfileRef = { current: null };
+
+// "Activating Pro..." transition pill shown briefly after checkout completes
+// Rendered on all screens that have auth modal support
+function ActivatingPill({ show }) {
+  if (!show) return null;
+  return (
+    <div style={{
+      position: "fixed",
+      top: 20,
+      left: "50%",
+      transform: "translateX(-50%)",
+      zIndex: 950,
+      padding: "10px 20px",
+      borderRadius: 999,
+      background: "linear-gradient(135deg, rgba(217,185,91,0.15) 0%, rgba(217,185,91,0.08) 100%)",
+      border: "1px solid rgba(217,185,91,0.5)",
+      color: "#D9B95B",
+      fontSize: 13,
+      fontWeight: 600,
+      fontFamily: "'Inter',sans-serif",
+      letterSpacing: "0.04em",
+      boxShadow: "0 4px 20px rgba(217,185,91,0.25)",
+      backdropFilter: "blur(8px)",
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      animation: "activatingPulse 1.4s ease-in-out infinite",
+    }}>
+      <span style={{ fontSize: 14 }}>&#10024;</span>
+      <span>Activating Pro...</span>
+      <style>{`
+        @keyframes activatingPulse {
+          0%, 100% { opacity: 1; transform: translateX(-50%) scale(1); }
+          50% { opacity: 0.85; transform: translateX(-50%) scale(1.02); }
+        }
+      `}</style>
+    </div>
+  );
 }
 
 
@@ -80,6 +125,13 @@ function initPaddle() {
       eventCallback: function(data) {
         if (data.name === "checkout.completed") {
           try { localStorage.setItem("rangeiq:subscribed", "true"); } catch (e) {}
+          // Trigger profile refetch so isPro updates without a page refresh
+          // Delay 2.5s to give the Paddle webhook time to write to Supabase
+          if (refetchProfileRef.current) {
+            setTimeout(() => {
+              if (refetchProfileRef.current) refetchProfileRef.current();
+            }, 2500);
+          }
         }
       },
     });
@@ -8504,6 +8556,23 @@ export default function RangeIQ() {
   const [authLoading, setAuthLoading] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [pendingCheckout, setPendingCheckout] = useState(null); // "monthly" | "annual" | null
+  const [isActivating, setIsActivating] = useState(false); // "Activating Pro..." state after checkout
+
+  // Register refetch function with module-level ref so Paddle checkout callback can call it
+  useEffect(() => {
+    refetchProfileRef.current = async () => {
+      if (!authUser?.id) return;
+      setIsActivating(true);
+      try {
+        const profile = await fetchUserProfile(authUser.id);
+        if (profile) setUserProfile(profile);
+      } finally {
+        // Auto-dismiss the activating pill after a short display window
+        setTimeout(() => setIsActivating(false), 2000);
+      }
+    };
+    return () => { refetchProfileRef.current = null; };
+  }, [authUser?.id]);
   
   // Initialize auth on mount + subscribe to auth changes
   useEffect(() => {
@@ -9237,6 +9306,7 @@ export default function RangeIQ() {
 
       {/* Auth modal - must render on home screen too (separate from main return) */}
       <AuthModal isOpen={showAuthModal} onClose={()=>setShowAuthModal(false)} onSuccess={(user)=>setAuthUser(user)}/>
+      <ActivatingPill show={isActivating}/>
 
       {/* Logo + tagline */}
       <div style={{ textAlign:"center", marginBottom:40, animation:"fadeUp 0.5s ease" }}>
@@ -9606,6 +9676,7 @@ export default function RangeIQ() {
       {showConfirm&&<ConfirmModal onConfirm={doReset} onCancel={()=>setShowConfirm(false)}/>}
       {lockedVillainTooltip&&<VillainLockedTooltip archetype={lockedVillainTooltip} onClose={()=>setLockedVillainTooltip(null)}/>}
       <AuthModal isOpen={showAuthModal} onClose={()=>setShowAuthModal(false)} onSuccess={(user)=>setAuthUser(user)}/>
+      <ActivatingPill show={isActivating}/>
       {showPlaySpot&&heroCards[0]&&heroCards[1]&&<PlayTheSpotSim heroCards={heroCards} archetype={archetype} heroIsIP={heroIsIP} board={board} potSize={potSize} stackBB={stackBB} bigBlind={gameSize.bb} onClose={()=>setShowPlaySpot(false)} onSaveToVault={saveHand}/>}
       {picker&&(
         <div onClick={e=>{if(e.target===e.currentTarget)setPicker(null);}}
