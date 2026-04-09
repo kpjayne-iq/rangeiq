@@ -47,6 +47,10 @@ function hasActiveSubscription(profile) {
 // Set by the component on mount, called by Paddle checkout.completed callback
 const refetchProfileRef = { current: null };
 
+// Module-level Pro status flag - set by the component whenever isPro changes
+// Allows module-level components like UpgradeCard to know whether to render
+const isProGlobal = { current: false };
+
 // "Activating Pro..." transition pill shown briefly after checkout completes
 // Rendered on all screens that have auth modal support
 function ActivatingPill({ show }) {
@@ -209,6 +213,8 @@ function getRemainingPostflop() { return Math.max(0, FREE_TIER.postflopSpotsPerD
 function getRemainingDrills() { return Math.max(0, FREE_TIER.drillsPerDay - getFreemiumUsage().drillCount); }
 
 function UpgradeCard({ headline, description, featureContext, style }) {
+  // Short-circuit for Pro users - no upgrade prompts shown
+  if (isProGlobal.current) return null;
   return (
     <div style={{
       background: "linear-gradient(135deg, rgba(217,185,91,0.08) 0%, rgba(217,185,91,0.02) 100%)",
@@ -226,7 +232,7 @@ function UpgradeCard({ headline, description, featureContext, style }) {
         letterSpacing: "0.04em", boxShadow: "0 4px 16px rgba(217,185,91,0.35)",
         border: "none", cursor: "pointer", fontFamily: "inherit",
       }}>Unlock Full IQ \u2014 {FREE_TIER.monthlyPrice}/mo</button>
-      <div style={{ fontSize: 11, color: "#6B7280", marginTop: 8 }}>or {FREE_TIER.yearlyPrice}/year (save {FREE_TIER.yearlySavings})</div>
+      <div style={{ fontSize: 11, color: "#6B7280", marginTop: 8 }}>or {FREE_TIER.yearlyPrice}/year (save {FREE_TIER.yearlySavings}) &middot; + applicable sales tax</div>
       <div style={{ fontSize: 11, color: "#10B981", fontWeight: 600, marginTop: 8 }}>Free through June 1 \u2014 your card won\u2019t be charged until then.</div>
     </div>
   );
@@ -8643,6 +8649,10 @@ export default function RangeIQ() {
   
   // Is current user Pro?
   const isPro = hasActiveSubscription(userProfile);
+  // Keep module-level flag in sync so module-scope UpgradeCard component can short-circuit for Pro users
+  useEffect(() => {
+    isProGlobal.current = isPro;
+  }, [isPro]);
   const [showLeakHunter,setShowLeakHunter] = useState(false);
   const [feedbackText,setFeedbackText]   = useState("");
   const [feedbackEmail,setFeedbackEmail] = useState("");
@@ -9332,7 +9342,8 @@ export default function RangeIQ() {
         </button>
       </div>
 
-      {/* Upgrade card */}
+      {/* Upgrade card - only shown to non-Pro users */}
+      {!isPro && (
       <div style={{ width:"100%", maxWidth:820, marginBottom:20, animation:"fadeUp 0.6s ease" }}>
         <div onClick={()=>openPaddleCheckout("monthly", authUser, userProfile)} style={{
           display:"block", padding:"20px 28px", borderRadius:14, textDecoration:"none",
@@ -9347,7 +9358,7 @@ export default function RangeIQ() {
               <div style={{ fontSize:10, fontWeight:700, color:"#D9B95B", textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:6 }}>Go Pro</div>
               <div style={{ fontSize:16, fontWeight:700, color:"#E5E7EB", marginBottom:4 }}>Unlock the full engine</div>
               <div style={{ fontSize:12, color:"#9CA3AF", lineHeight:1.5 }}>All 9 opponent types, unlimited postflop, unlimited drills, full vault.</div>
-              <div style={{ fontSize:13, color:"#D9B95B", fontWeight:700, marginTop:6 }}>{FREE_TIER.monthlyPrice}/mo or {FREE_TIER.yearlyPrice}/year</div>
+              <div style={{ fontSize:13, color:"#D9B95B", fontWeight:700, marginTop:6 }}>{FREE_TIER.monthlyPrice}/mo or {FREE_TIER.yearlyPrice}/year <span style={{ color:"#6B7280", fontWeight:500, fontSize:11 }}>+ applicable sales tax</span></div>
               <div style={{ fontSize:11, color:"#10B981", fontWeight:600, marginTop:4 }}>Free through June 1. Your card won't be charged until then.</div>
             </div>
             <div style={{ padding:"10px 22px", borderRadius:8,
@@ -9358,6 +9369,7 @@ export default function RangeIQ() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Feature cards */}
       <div className="riq-home-grid" style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, width:"100%", maxWidth:820, marginBottom:44, animation:"fadeUp 0.7s ease" }}>
