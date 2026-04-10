@@ -15,6 +15,24 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   },
 });
 
+// ================================================================
+// AUTH GATE SCAFFOLD (Block 3 Segment 1 — ships dark, flip in Segment 2)
+// ================================================================
+const ENABLE_AUTH_GATE = false;
+
+const DISPOSABLE_EMAIL_DOMAINS = new Set([
+  "0-mail.com","0clickemail.com","0wnd.net","0wnd.org","10minutemail.com","10minutemail.net","10minutemail.org","20minutemail.com","2prong.com","30minutemail.com","3d-painting.com","4warding.com","4warding.net","4warding.org","60minutemail.com","anonbox.net","anonymail.dk","anonymbox.com","antichef.com","antichef.net","antispam.de","armyspy.com","bigstring.com","binkmail.com","bio-muesli.net","bobmail.info","bodhi.lawlita.com","bofthew.com","brefmail.com","bsnow.net","bugmenot.com","bumpymail.com","burnermail.io","buymoreplays.com","cetpass.com","chogmail.com","cool.fr.nf","courriel.fr.nf","cubiclink.com","curryworld.de","cust.in","dacoolest.com","dandikmail.com","dayrep.com","deadaddress.com","despam.it","devnullmail.com","dfgh.net","discard.email","discardmail.com","discardmail.de","disposableaddress.com","disposableemailaddresses.com","disposableinbox.com","dispose.it","dispostable.com","dodgeit.com","dodgit.com","dontreg.com","dontsendmespam.de","drdrb.net","dropmail.me","duskmail.com","e4ward.com","easytrashmail.com","einrot.com","einrot.de","emailgo.de","emailias.com","emaillime.com","emailsensei.com","emailtemporanea.com","emailtemporanea.net","emailtemporar.ro","emailtemporario.com.br","emailthe.net","emailtmp.com","emailwarden.com","emailx.at.hm","emailxfer.com","emeil.in","emeil.ir","emz.net","enterto.com","ephemail.net","etranquil.com","explodemail.com","fakeinbox.com","fakeinformation.com","fakemailgenerator.com","fansworldwide.de","fantasymail.de","fastacura.com","filzmail.com","fizmail.com","fleckens.hu","frapmail.com","front14.org","fux0ringduh.com","garliclife.com","gelitik.in","get1mail.com","get2mail.fr","getairmail.com","getonemail.com","ghosttexter.de","giantmail.de","girlsundertheinfluence.com","gishpuppy.com","gmial.com","goemailgo.com","gotmail.net","gowikibooks.com","grr.la","guerillamail.biz","guerillamail.com","guerillamail.de","guerillamail.net","guerillamail.org","guerrillamail.biz","guerrillamail.com","guerrillamail.de","guerrillamail.info","guerrillamail.net","guerrillamail.org","guerrillamailblock.com","h.mintemail.com","haltospam.com","harakirimail.com","hatespam.org","hidemail.de","hmamail.com","hotpop.com","hulapla.de","ieatspam.eu","ieatspam.info","ihateyoualot.info","iheartspam.org","imgof.com","incognitomail.com","incognitomail.net","incognitomail.org","inoutmail.de","inoutmail.eu","inoutmail.info","inoutmail.net","insorg-mail.info","jetable.com","jetable.fr.nf","jetable.net","jetable.org","jnxjn.com","junk1e.com","kasmail.com","kaspop.com","keepmymail.com","killmail.com","killmail.net","klassmaster.com","kulturbetrieb.info","kurzepost.de","lawlita.com","letthemeatspam.com","lhsdv.com","lifebyfood.com","link2mail.net","litedrop.com","lol.ovpn.to","lookugly.com","lortemail.dk","lr78.com","lroid.com","mailcatch.com","maildrop.cc","maileater.com","mailexpire.com","mailfa.tk","mailforspam.com","mailfreeonline.com","mailin8r.com","mailinater.com","mailinator.com","mailinator.net","mailinator.org","mailinator2.com","mailincubator.com","mailme.lv","mailmetrash.com","mailmoat.com","mailnator.com","mailnesia.com","mailnull.com","mailshell.com","mailsiphon.com","mailtemp.info","mailtome.de","mailtothis.com","mailtrash.net","mailtv.net","mailzilla.com","mailzilla.org","mbx.cc","mega.zik.dj","meinspamschutz.de","meltmail.com","messagebeamer.de","mierdamail.com","mintemail.com","moncourrier.fr.nf","monemail.fr.nf","mt2009.com","mt2015.com","mt2017.com","mytrashmail.com","neverbox.com","no-spam.ws","nobulk.com","noclickemail.com","nogmailspam.info","nomail.xl.cx","nomail2me.com","nomorespamemails.com","nospam.ze.tc","nospam4.us","nospamfor.us","notmailinator.com","nowmymail.com","nurfuerspam.de","objectmail.com","obobbo.com","oneoffemail.com","onewaymail.com","online.ms","oopi.org","ordinaryamerican.net","otherinbox.com","ourklips.com","outlawspam.com","ovpn.to","owlpic.com","pancakemail.com","pimpedupmyspace.com","pjkp.com","plexolan.de","poczta.onet.pl","politikerclub.de","poofy.org","pookmail.com","privacy.net","proxymail.eu","prtnx.com","putthisinyourspamdatabase.com","quickinbox.com","rcpt.at","recode.me","recursor.net","regbypass.com","rejectmail.com","rklips.com","rmqkr.net","rppkn.com","rtrtr.com","s0ny.net","safe-mail.net","safersignup.de","safetymail.info","safetypost.de","sandelf.de","saynotospams.com","selfdestructingmail.com","sendspamhere.com","sharklasers.com","shieldedmail.com","shiftmail.com","shortmail.net","sibmail.com","skeefmail.com","slaskpost.se","slopsbox.com","smellfear.com","snakemail.com","sneakemail.com","snkmail.com","sofimail.com","sofort-mail.de","softpls.asia","sogetthis.com","spam.la","spam.su","spam4.me","spamavert.com","spambob.com","spambob.net","spambob.org","spambog.com","spambog.de","spambog.ru","spambox.info","spambox.us","spamcannon.com","spamcannon.net","spamcero.com","spamcon.org","spamcorptastic.com","spamcowboy.com","spamcowboy.net","spamcowboy.org","spamday.com","spamex.com","spamfree.eu","spamfree24.com","spamfree24.de","spamfree24.eu","spamfree24.info","spamfree24.net","spamfree24.org","spamgoes.com","spamgourmet.com","spamgourmet.net","spamgourmet.org","spamherelots.com","spamhereplease.com","spamhole.com","spamify.com","spaminator.de","spamkill.info","spaml.com","spaml.de","spammotel.com","spamobox.com","spamoff.de","spamsalad.in","spamslicer.com","spamspot.com","spamthis.co.uk","spamthisplease.com","spamtroll.net","speed.1s.fr","supergreatmail.com","supermailer.jp","superrito.com","superstachel.de","suremail.info","tagyourself.com","talkinator.com","teewars.org","teleworm.com","teleworm.us","temp-mail.com","temp-mail.org","temp-mail.ru","tempalias.com","tempe-mail.com","tempemail.biz","tempemail.com","tempemail.net","tempinbox.co.uk","tempinbox.com","tempmail.eu","tempmail.it","tempmail2.com","tempmaildemand.com","tempmailer.com","tempmailer.de","tempomail.fr","temporarily.de","temporarioemail.com.br","temporaryemail.net","temporaryforwarding.com","temporaryinbox.com","temporarymailaddress.com","tempthe.net","thanksnospam.info","thankyou2010.com","thc.st","thelimestones.com","thisisnotmyrealemail.com","throwam.com","throwawayemailaddress.com","tilien.com","tmail.ws","tmailinator.com","toomail.biz","topranklist.de","tradermail.info","trash-amil.com","trash-mail.at","trash-mail.com","trash-mail.de","trash2009.com","trashemail.de","trashmail.at","trashmail.com","trashmail.de","trashmail.me","trashmail.net","trashmail.org","trashmail.ws","trashymail.com","trashymail.net","trialmail.de","trillianpro.com","tyldd.com","uggsrock.com","upliftnow.com","uplipht.com","uroid.com","veryrealemail.com","viditag.com","viralplays.com","vpn.st","vsimcard.com","vubby.com","walala.org","walkmail.net","webemail.me","webm4il.info","wegwerfadresse.de","wegwerfemail.com","wegwerfemail.de","wegwerfmail.de","wegwerfmail.info","wegwerfmail.net","wegwerfmail.org","wh4f.org","whyspam.me","willhackforfood.biz","willselfdestruct.com","winemaven.info","wronghead.com","wuzup.net","wuzupmail.net","xagloo.com","xemaps.com","xents.com","xmaily.com","xoxy.net","yep.it","yogamaven.com","yopmail.com","yopmail.fr","yopmail.net","ypmail.webarnak.fr.eu.org","yuurok.com","z1p.biz","za.com","zehnminuten.de","zehnminutenmail.de","zetmail.com","zippymail.info","zoaxe.com","zoemail.org","zomg.info"
+]);
+
+function isDisposableEmail(email) {
+  if (!email || typeof email !== "string") return false;
+  const at = email.lastIndexOf("@");
+  if (at < 0) return false;
+  const domain = email.slice(at + 1).trim().toLowerCase();
+  if (!domain) return false;
+  return DISPOSABLE_EMAIL_DOMAINS.has(domain);
+}
+
 // Helper: fetch user profile (subscription status) from Supabase
 async function fetchUserProfile(userId) {
   if (!userId) return null;
@@ -8458,6 +8476,17 @@ function AuthModal({ isOpen, onClose, onSuccess }) {
 // ================================================================
 // MAIN APP
 // ================================================================
+function WelcomeScreenPlaceholder() {
+  return (
+    <div style={{minHeight:"100vh",background:"#0A0A0A",color:"#E5E5E5",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"system-ui,sans-serif",padding:"24px",textAlign:"center"}}>
+      <div>
+        <div style={{fontSize:"24px",fontWeight:600,marginBottom:"8px"}}>Welcome to RangeIQ</div>
+        <div style={{fontSize:"13px",opacity:0.5}}>Auth gate placeholder — Segment 2</div>
+      </div>
+    </div>
+  );
+}
+
 export default function RangeIQ() {
   const [screen,setScreen]             = useState("home");
   const [heroCards,setHeroCards]       = useState([null,null]);
@@ -9681,6 +9710,7 @@ export default function RangeIQ() {
   );
 
   // -- ANALYZE --------------------------------------------------
+  if (ENABLE_AUTH_GATE && !authUser) return <WelcomeScreenPlaceholder />;
   return (
     <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'Inter',sans-serif",color:C.text }}>
       <style>{BASE_CSS}</style>
