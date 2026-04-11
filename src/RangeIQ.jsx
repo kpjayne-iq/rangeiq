@@ -8480,7 +8480,7 @@ function WelcomeScreen() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState("idle"); // idle | sending | sent | error
   const [errorMsg, setErrorMsg] = useState("");
-  const GOLD = "#D4AF37";
+  const GOLD = "#D9B95B";
   const BG = "#0A0A0A";
   const CARD = "#141414";
   const BORDER = "#2A2A2A";
@@ -8531,8 +8531,8 @@ function WelcomeScreen() {
   return (
     <div style={{minHeight:"100dvh",background:BG,color:TEXT,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"system-ui,-apple-system,sans-serif",padding:"24px",paddingTop:"max(24px,env(safe-area-inset-top))",paddingBottom:"max(24px,env(safe-area-inset-bottom))"}}>
       <div style={{width:"100%",maxWidth:"400px",background:CARD,border:`1px solid ${BORDER}`,borderRadius:"12px",padding:"32px 24px",textAlign:"center"}}>
-        <div style={{fontSize:"32px",fontWeight:700,letterSpacing:"-0.5px",color:GOLD,marginBottom:"8px"}}>RangeIQ</div>
-        <div style={{fontSize:"13px",color:MUTED,marginBottom:"28px",letterSpacing:"0.3px"}}>Range IQ is the exploit.</div>
+        <div style={{fontSize:"32px",fontWeight:800,letterSpacing:"-0.5px",marginBottom:"8px"}}><span style={{color:GOLD}}>Range</span><span style={{color:TEXT}}>IQ</span></div>
+        <div style={{fontSize:"11px",color:MUTED,marginBottom:"28px",letterSpacing:"1.5px",textTransform:"uppercase"}}>Range IQ is the exploit.</div>
 
         {status === "sent" ? (
           <div style={{padding:"20px 0"}}>
