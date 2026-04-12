@@ -9266,6 +9266,8 @@ export default function RangeIQ() {
   
   // Is current user Pro?
   const isPro = hasActiveSubscription(userProfile);
+  
+
   // Keep module-level flag in sync so module-scope UpgradeCard component can short-circuit for Pro users
   useEffect(() => {
     isProGlobal.current = isPro;
@@ -10306,7 +10308,13 @@ export default function RangeIQ() {
   if (route.type === "redeem") {
     return <RedeemPage code={route.code} authUser={authUser} authLoading={authLoading} userProfile={userProfile} />;
   }
-
+// -- ITEM 47: ROUTE DISPATCH (after all hooks, before screen returns) --
+  if (route.type === "admin") {
+    return <AdminPage authUser={authUser} authLoading={authLoading} />;
+  }
+  if (route.type === "redeem") {
+    return <RedeemPage code={route.code} authUser={authUser} authLoading={authLoading} userProfile={userProfile} />;
+  }
   // -- ANALYZE --------------------------------------------------
   if (ENABLE_AUTH_GATE && !authLoading && !authUser) return <WelcomeScreen />;
   return (
