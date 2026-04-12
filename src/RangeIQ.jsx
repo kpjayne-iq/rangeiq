@@ -54,11 +54,33 @@ async function fetchUserProfile(userId) {
 }
 
 // Helper: check if user has active Pro subscription
-// Accepts all valid Pro states: "pro" (written by Paddle webhook), "active", "trialing"
+// Pro paths:
+//   1. grant_type = 'paid' + subscription_status in (pro|active|trialing)  [Paddle]
+//   2. grant_type = 'comp' + expires_at > now                              [Admin comp]
+// Legacy fallback: subscription_status check alone (pre-grant_type rollout)
 function hasActiveSubscription(profile) {
   if (!profile) return false;
   const status = profile.subscription_status;
-  return status === "pro" || status === "active" || status === "trialing";
+  const grantType = profile.grant_type;
+  const expiresAt = profile.expires_at;
+
+  // Path 2: active comp
+  if (grantType === "comp") {
+    if (!expiresAt) return false;
+    return new Date(expiresAt) > new Date();
+  }
+
+  // Path 1: paid subscription
+  if (grantType === "paid") {
+    return status === "pro" || status === "active" || status === "trialing";
+  }
+
+  // Legacy fallback (profiles created before grant_type column existed)
+  if (grantType === undefined || grantType === null || grantType === "none") {
+    return status === "pro" || status === "active" || status === "trialing";
+  }
+
+  return false;
 }
 
 // Module-level ref to the component's refetch function
@@ -8585,7 +8607,466 @@ function WelcomeScreen() {
   );
 }
 
+// ================================================================
+// ITEM 47 — COMP-CODE FEATURE: ROUTING + PAGES
+// ================================================================
+
+// Admin allowlist — keep in sync with api/_lib/admin-auth.js
+const ADMIN_EMAILS = new Set(["kpjayne1@gmail.com"]);
+
+// Parse current URL to determine route.
+// Returns: { type: "app" } | { type: "admin" } | { type: "redeem", code }
+function parseRoute() {
+  if (typeof window === "undefined") return { type: "app" };
+  const path = window.location.pathname || "/";
+  if (path === "/admin" || path === "/admin/") return { type: "admin" };
+  const redeemMatch = path.match(/^\/redeem\/([A-Za-z0-9-]+)\/?$/);
+  if (redeemMatch) return { type: "redeem", code: redeemMatch[1].toUpperCase() };
+  return { type: "app" };
+}
+
+// Shared visual tokens for admin/redeem pages
+const PAGE_BG = "#0A0A0A";
+const PAGE_CARD = "#141414";
+const PAGE_BORDER = "#2A2A2A";
+const PAGE_TEXT = "#E5E5E5";
+const PAGE_MUTED = "#888";
+const GOLD = "#D9B95B";
+
+function PageShell({ title, children }) {
+  return (
+    <div style={{ minHeight: "100vh", background: PAGE_BG, color: PAGE_TEXT, fontFamily: "'Inter',sans-serif", padding: "40px 20px" }}>
+      <div style={{ maxWidth: 960, margin: "0 auto" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 32 }}>
+          <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0, letterSpacing: "0.01em" }}>
+            <span style={{ color: GOLD }}>Range</span><span style={{ color: "#fff" }}>IQ</span>
+            <span style={{ color: PAGE_MUTED, fontWeight: 400, marginLeft: 12, fontSize: 18 }}>{title}</span>
+          </h1>
+          <a href="/" style={{ color: PAGE_MUTED, textDecoration: "none", fontSize: 13 }}>← Back to app</a>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ---------------- ADMIN PAGE ----------------------------------------
+function AdminPage({ authUser, authLoading }) {
+  const [codes, setCodes] = useState([]);
+  const [activeComps, setActiveComps] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [newDuration, setNewDuration] = useState(365);
+  const [newNotes, setNewNotes] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const isAdmin = authUser && ADMIN_EMAILS.has((authUser.email || "").toLowerCase());
+
+  async function fetchData() {
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const r = await fetch("/api/admin-codes", {
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      if (!r.ok) { setToast("Failed to load"); return; }
+      const data = await r.json();
+      setCodes(data.codes || []);
+      setActiveComps(data.active_comps || []);
+    } catch (e) {
+      setToast("Load error: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (isAdmin) fetchData();
+  }, [isAdmin]);
+
+  async function createCode() {
+    setCreating(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch("/api/admin-create-code", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session?.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ duration_days: newDuration, notes: newNotes || null }),
+      });
+      const data = await r.json();
+      if (!r.ok) { setToast("Error: " + (data.error || "unknown")); return; }
+      setToast(`Created: ${data.code}`);
+      setNewNotes("");
+      fetchData();
+    } catch (e) {
+      setToast("Create error: " + e.message);
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function revokeCode(code) {
+    const reason = window.prompt("Revoke reason (optional):");
+    if (reason === null) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch("/api/admin-codes", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session?.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action: "revoke", code, reason }),
+      });
+      const data = await r.json();
+      if (!r.ok) { setToast("Error: " + (data.error || "unknown")); return; }
+      setToast("Revoked");
+      fetchData();
+    } catch (e) {
+      setToast("Error: " + e.message);
+    }
+  }
+
+  async function revokeComp(userId, email) {
+    if (!window.confirm(`Revoke active comp for ${email}? This immediately removes their Pro access.`)) return;
+    const reason = window.prompt("Revoke reason (optional):");
+    if (reason === null) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch("/api/admin-codes", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session?.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action: "revoke_comp", user_id: userId, reason }),
+      });
+      const data = await r.json();
+      if (!r.ok) { setToast("Error: " + (data.error || "unknown")); return; }
+      setToast("Comp revoked");
+      fetchData();
+    } catch (e) {
+      setToast("Error: " + e.message);
+    }
+  }
+
+  function copyLink(code) {
+    const url = `${window.location.origin}/redeem/${code}`;
+    navigator.clipboard.writeText(url).then(
+      () => setToast("Link copied"),
+      () => setToast("Copy failed — " + url)
+    );
+  }
+
+  if (authLoading) {
+    return <PageShell title="Admin"><div style={{ color: PAGE_MUTED }}>Loading...</div></PageShell>;
+  }
+  if (!authUser) {
+    return <PageShell title="Admin">
+      <div style={{ background: PAGE_CARD, border: `1px solid ${PAGE_BORDER}`, borderRadius: 12, padding: 32, textAlign: "center" }}>
+        <p style={{ margin: "0 0 16px" }}>Sign in required.</p>
+        <a href="/" style={{ color: GOLD }}>Go to sign-in</a>
+      </div>
+    </PageShell>;
+  }
+  if (!isAdmin) {
+    return <PageShell title="Admin">
+      <div style={{ background: PAGE_CARD, border: `1px solid ${PAGE_BORDER}`, borderRadius: 12, padding: 32, textAlign: "center" }}>
+        <p style={{ margin: 0 }}>Not authorized.</p>
+      </div>
+    </PageShell>;
+  }
+
+  const unredeemed = codes.filter(c => !c.redeemed_at && !c.revoked_at);
+  const used = codes.filter(c => c.redeemed_at);
+  const revoked = codes.filter(c => c.revoked_at);
+
+  const btn = (bg) => ({
+    background: bg, border: "none", color: "#0A0A0A", padding: "8px 14px",
+    borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+  });
+  const ghostBtn = {
+    background: "transparent", border: `1px solid ${PAGE_BORDER}`, color: PAGE_TEXT,
+    padding: "6px 10px", borderRadius: 6, fontSize: 11, cursor: "pointer", fontFamily: "inherit",
+  };
+
+  return (
+    <PageShell title="Admin - Comp Codes">
+      {toast && (
+        <div style={{ position: "fixed", top: 20, right: 20, background: PAGE_CARD, border: `1px solid ${GOLD}`, color: PAGE_TEXT, padding: "10px 16px", borderRadius: 8, zIndex: 1000 }}
+             onClick={() => setToast(null)}>
+          {toast}
+        </div>
+      )}
+
+      <div style={{ background: PAGE_CARD, border: `1px solid ${PAGE_BORDER}`, borderRadius: 12, padding: 24, marginBottom: 24 }}>
+        <h2 style={{ fontSize: 16, margin: "0 0 16px", color: GOLD }}>Create new code</h2>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <div>
+            <label style={{ display: "block", fontSize: 11, color: PAGE_MUTED, marginBottom: 4 }}>Duration</label>
+            <select value={newDuration} onChange={e => setNewDuration(Number(e.target.value))}
+                    style={{ background: "#0A0A0A", color: PAGE_TEXT, border: `1px solid ${PAGE_BORDER}`, padding: "8px 10px", borderRadius: 6, fontFamily: "inherit" }}>
+              <option value={30}>30 days</option>
+              <option value={90}>90 days</option>
+              <option value={180}>180 days</option>
+              <option value={365}>365 days (1 year)</option>
+              <option value={730}>730 days (2 years)</option>
+            </select>
+          </div>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <label style={{ display: "block", fontSize: 11, color: PAGE_MUTED, marginBottom: 4 }}>Notes (e.g. "Brad Owen YouTube")</label>
+            <input type="text" value={newNotes} onChange={e => setNewNotes(e.target.value)}
+                   style={{ width: "100%", background: "#0A0A0A", color: PAGE_TEXT, border: `1px solid ${PAGE_BORDER}`, padding: "8px 10px", borderRadius: 6, fontFamily: "inherit", boxSizing: "border-box" }} />
+          </div>
+          <button onClick={createCode} disabled={creating} style={btn(GOLD)}>
+            {creating ? "Creating..." : "Generate Code"}
+          </button>
+        </div>
+      </div>
+
+      {loading ? <div style={{ color: PAGE_MUTED }}>Loading…</div> : (
+        <>
+          <div style={{ background: PAGE_CARD, border: `1px solid ${PAGE_BORDER}`, borderRadius: 12, padding: 24, marginBottom: 24 }}>
+            <h2 style={{ fontSize: 16, margin: "0 0 16px", color: GOLD }}>Active comps ({activeComps.length})</h2>
+            {activeComps.length === 0 ? (
+              <div style={{ color: PAGE_MUTED, fontSize: 13 }}>No active comps.</div>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ textAlign: "left", color: PAGE_MUTED, borderBottom: `1px solid ${PAGE_BORDER}` }}>
+                    <th style={{ padding: "8px 8px" }}>Email</th>
+                    <th style={{ padding: "8px 8px" }}>Expires</th>
+                    <th style={{ padding: "8px 8px" }}>Notes</th>
+                    <th style={{ padding: "8px 8px" }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeComps.map(c => (
+                    <tr key={c.user_id} style={{ borderBottom: `1px solid ${PAGE_BORDER}` }}>
+                      <td style={{ padding: "8px 8px" }}>{c.email}</td>
+                      <td style={{ padding: "8px 8px" }}>{c.expires_at ? new Date(c.expires_at).toLocaleDateString() : "—"}</td>
+                      <td style={{ padding: "8px 8px", color: PAGE_MUTED }}>{c.granted_notes || "—"}</td>
+                      <td style={{ padding: "8px 8px", textAlign: "right" }}>
+                        <button onClick={() => revokeComp(c.user_id, c.email)} style={ghostBtn}>Revoke</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <div style={{ background: PAGE_CARD, border: `1px solid ${PAGE_BORDER}`, borderRadius: 12, padding: 24, marginBottom: 24 }}>
+            <h2 style={{ fontSize: 16, margin: "0 0 16px", color: GOLD }}>Unredeemed codes ({unredeemed.length})</h2>
+            {unredeemed.length === 0 ? (
+              <div style={{ color: PAGE_MUTED, fontSize: 13 }}>No outstanding codes.</div>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ textAlign: "left", color: PAGE_MUTED, borderBottom: `1px solid ${PAGE_BORDER}` }}>
+                    <th style={{ padding: "8px 8px" }}>Code</th>
+                    <th style={{ padding: "8px 8px" }}>Duration</th>
+                    <th style={{ padding: "8px 8px" }}>Notes</th>
+                    <th style={{ padding: "8px 8px" }}>Created</th>
+                    <th style={{ padding: "8px 8px" }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {unredeemed.map(c => (
+                    <tr key={c.code} style={{ borderBottom: `1px solid ${PAGE_BORDER}` }}>
+                      <td style={{ padding: "8px 8px", fontFamily: "monospace", color: GOLD }}>{c.code}</td>
+                      <td style={{ padding: "8px 8px" }}>{c.duration_days}d</td>
+                      <td style={{ padding: "8px 8px", color: PAGE_MUTED }}>{c.notes || "—"}</td>
+                      <td style={{ padding: "8px 8px", color: PAGE_MUTED }}>{new Date(c.created_at).toLocaleDateString()}</td>
+                      <td style={{ padding: "8px 8px", textAlign: "right", whiteSpace: "nowrap" }}>
+                        <button onClick={() => copyLink(c.code)} style={{...ghostBtn, marginRight: 6}}>Copy link</button>
+                        <button onClick={() => revokeCode(c.code)} style={ghostBtn}>Revoke</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {used.length > 0 && (
+            <div style={{ background: PAGE_CARD, border: `1px solid ${PAGE_BORDER}`, borderRadius: 12, padding: 24, marginBottom: 24 }}>
+              <h2 style={{ fontSize: 16, margin: "0 0 16px", color: GOLD }}>Redeemed codes ({used.length})</h2>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ textAlign: "left", color: PAGE_MUTED, borderBottom: `1px solid ${PAGE_BORDER}` }}>
+                    <th style={{ padding: "8px 8px" }}>Code</th>
+                    <th style={{ padding: "8px 8px" }}>Redeemed by</th>
+                    <th style={{ padding: "8px 8px" }}>On</th>
+                    <th style={{ padding: "8px 8px" }}>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {used.map(c => (
+                    <tr key={c.code} style={{ borderBottom: `1px solid ${PAGE_BORDER}` }}>
+                      <td style={{ padding: "8px 8px", fontFamily: "monospace", color: PAGE_MUTED }}>{c.code}</td>
+                      <td style={{ padding: "8px 8px" }}>{c.redeemed_by_email || "—"}</td>
+                      <td style={{ padding: "8px 8px", color: PAGE_MUTED }}>{c.redeemed_at ? new Date(c.redeemed_at).toLocaleDateString() : "—"}</td>
+                      <td style={{ padding: "8px 8px", color: PAGE_MUTED }}>{c.notes || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {revoked.length > 0 && (
+            <div style={{ background: PAGE_CARD, border: `1px solid ${PAGE_BORDER}`, borderRadius: 12, padding: 24 }}>
+              <h2 style={{ fontSize: 16, margin: "0 0 16px", color: PAGE_MUTED }}>Revoked codes ({revoked.length})</h2>
+              <div style={{ fontSize: 12, color: PAGE_MUTED }}>{revoked.map(c => c.code).join(", ")}</div>
+            </div>
+          )}
+        </>
+      )}
+    </PageShell>
+  );
+}
+
+// ---------------- REDEEM PAGE ---------------------------------------
+function RedeemPage({ code, authUser, authLoading, userProfile }) {
+  const [state, setState] = useState("idle"); // idle | redeeming | success | error
+  const [error, setError] = useState(null);
+  const [result, setResult] = useState(null);
+
+  async function doRedeem() {
+    setState("redeeming");
+    setError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch("/api/redeem-code", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session?.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ code }),
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        setError({ code: data.error, message: data.message || "Redemption failed" });
+        setState("error");
+        return;
+      }
+      setResult(data);
+      setState("success");
+    } catch (e) {
+      setError({ code: "network", message: e.message });
+      setState("error");
+    }
+  }
+
+  if (authLoading) {
+    return <PageShell title="Redeem"><div style={{ color: PAGE_MUTED }}>Loading...</div></PageShell>;
+  }
+
+  if (!authUser) {
+    return (
+      <PageShell title="Redeem code">
+        <div style={{ background: PAGE_CARD, border: `1px solid ${PAGE_BORDER}`, borderRadius: 12, padding: 32, textAlign: "center" }}>
+          <div style={{ fontSize: 13, color: PAGE_MUTED, marginBottom: 8 }}>Your code</div>
+          <div style={{ fontFamily: "monospace", fontSize: 22, color: GOLD, letterSpacing: "0.1em", marginBottom: 24 }}>{code}</div>
+          <p style={{ margin: "0 0 24px", color: PAGE_TEXT }}>Sign in or create a free account to redeem your complimentary Pro access.</p>
+          <a href={`/?redeem=${encodeURIComponent(code)}`}
+             style={{ display: "inline-block", background: GOLD, color: "#0A0A0A", padding: "12px 24px", borderRadius: 8, textDecoration: "none", fontWeight: 700 }}>
+            Sign in to redeem
+          </a>
+          <p style={{ marginTop: 24, fontSize: 12, color: PAGE_MUTED }}>Your code is saved — you'll be taken back here after signing in.</p>
+        </div>
+      </PageShell>
+    );
+  }
+
+  if (state === "idle") {
+    const isProPaid = userProfile?.grant_type === "paid" && userProfile?.subscription_status !== "free";
+    const isCompActive = userProfile?.grant_type === "comp" &&
+                         userProfile?.expires_at &&
+                         new Date(userProfile.expires_at) > new Date();
+
+    if (isProPaid) {
+      return <PageShell title="Redeem code">
+        <div style={{ background: PAGE_CARD, border: `1px solid ${PAGE_BORDER}`, borderRadius: 12, padding: 32, textAlign: "center" }}>
+          <h2 style={{ color: GOLD, margin: "0 0 12px" }}>You already have Pro</h2>
+          <p>You're on a paid subscription. This code can be shared with someone else.</p>
+          <div style={{ fontFamily: "monospace", fontSize: 18, color: GOLD, marginTop: 16 }}>{code}</div>
+          <a href="/" style={{ display: "inline-block", marginTop: 24, color: GOLD }}>← Back to app</a>
+        </div>
+      </PageShell>;
+    }
+    if (isCompActive) {
+      return <PageShell title="Redeem code">
+        <div style={{ background: PAGE_CARD, border: `1px solid ${PAGE_BORDER}`, borderRadius: 12, padding: 32, textAlign: "center" }}>
+          <h2 style={{ color: GOLD, margin: "0 0 12px" }}>Comp already active</h2>
+          <p>Your current comp access expires on <strong>{new Date(userProfile.expires_at).toLocaleDateString()}</strong>.</p>
+          <p style={{ color: PAGE_MUTED, fontSize: 13 }}>You can save this code for later or share it.</p>
+          <a href="/" style={{ display: "inline-block", marginTop: 24, color: GOLD }}>← Back to app</a>
+        </div>
+      </PageShell>;
+    }
+
+    return (
+      <PageShell title="Redeem code">
+        <div style={{ background: PAGE_CARD, border: `1px solid ${PAGE_BORDER}`, borderRadius: 12, padding: 32, textAlign: "center" }}>
+          <div style={{ fontSize: 13, color: PAGE_MUTED, marginBottom: 8 }}>Complimentary Pro access</div>
+          <div style={{ fontFamily: "monospace", fontSize: 22, color: GOLD, letterSpacing: "0.1em", marginBottom: 24 }}>{code}</div>
+          <p style={{ margin: "0 0 24px" }}>Redeem for <strong>{authUser.email}</strong>?</p>
+          <button onClick={doRedeem}
+                  style={{ background: GOLD, color: "#0A0A0A", border: "none", padding: "12px 32px", borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: "inherit" }}>
+            Redeem code
+          </button>
+        </div>
+      </PageShell>
+    );
+  }
+
+  if (state === "redeeming") {
+    return <PageShell title="Redeem code">
+      <div style={{ background: PAGE_CARD, border: `1px solid ${PAGE_BORDER}`, borderRadius: 12, padding: 32, textAlign: "center" }}>
+        <div style={{ color: GOLD }}>Redeeming...</div>
+      </div>
+    </PageShell>;
+  }
+
+  if (state === "success") {
+    return <PageShell title="Redeem code">
+      <div style={{ background: PAGE_CARD, border: `1px solid ${GOLD}`, borderRadius: 12, padding: 32, textAlign: "center" }}>
+        <h2 style={{ color: GOLD, margin: "0 0 12px" }}>Pro unlocked</h2>
+        <p>Your RangeIQ Pro access is active until <strong>{new Date(result.expires_at).toLocaleDateString()}</strong>.</p>
+        <a href="/" style={{ display: "inline-block", marginTop: 24, background: GOLD, color: "#0A0A0A", padding: "12px 24px", borderRadius: 8, textDecoration: "none", fontWeight: 700 }}>
+          Open RangeIQ
+        </a>
+      </div>
+    </PageShell>;
+  }
+
+  const errMap = {
+    invalid_code: "This code doesn't exist. Check for typos.",
+    revoked_code: "This code has been revoked.",
+    already_redeemed: "This code has already been used by someone else.",
+    already_redeemed_by_you: "You've already redeemed this code.",
+    already_paid: "You're already on a paid subscription.",
+    already_comp: "You already have an active comp.",
+  };
+  return <PageShell title="Redeem code">
+    <div style={{ background: PAGE_CARD, border: `1px solid #8B2E2E`, borderRadius: 12, padding: 32, textAlign: "center" }}>
+      <h2 style={{ color: "#E87B7B", margin: "0 0 12px" }}>Couldn't redeem</h2>
+      <p>{errMap[error?.code] || error?.message || "Something went wrong."}</p>
+      <a href="/" style={{ display: "inline-block", marginTop: 24, color: GOLD }}>← Back to app</a>
+    </div>
+  </PageShell>;
+}
+
 export default function RangeIQ() {
+  // Item 47: route dispatch — read once at mount, stable for component lifetime
+  const [route] = useState(() => parseRoute());
   const [screen,setScreen]             = useState("home");
   const [heroCards,setHeroCards]       = useState([null,null]);
   const [heroPos,setHeroPos]           = useState("BTN");
@@ -8728,6 +9209,15 @@ export default function RangeIQ() {
         setAuthUser(session.user);
         fetchUserProfile(session.user.id).then(profile => {
           setUserProfile(profile);
+          // Item 47: if user signed in via /?redeem=CODE link, bounce them to /redeem/CODE
+          try {
+            const params = new URLSearchParams(window.location.search);
+            const redeemCode = params.get("redeem");
+            if (redeemCode && window.location.pathname === "/") {
+              window.location.replace(`/redeem/${encodeURIComponent(redeemCode.toUpperCase())}`);
+              return;
+            }
+          } catch (e) { /* ignore */ }
           // If user was trying to upgrade before signing in, continue the checkout now
           if (pendingCheckout) {
             const interval = pendingCheckout;
@@ -9806,6 +10296,16 @@ export default function RangeIQ() {
       </div>
     </div>
   );
+
+  // -- ROUTE DISPATCH (Item 47) --------------------------------
+  // /admin and /redeem/:code render their own pages regardless of auth gate.
+  // They handle their own signed-in/out states.
+  if (route.type === "admin") {
+    return <AdminPage authUser={authUser} authLoading={authLoading} />;
+  }
+  if (route.type === "redeem") {
+    return <RedeemPage code={route.code} authUser={authUser} authLoading={authLoading} userProfile={userProfile} />;
+  }
 
   // -- ANALYZE --------------------------------------------------
   if (ENABLE_AUTH_GATE && !authLoading && !authUser) return <WelcomeScreen />;
